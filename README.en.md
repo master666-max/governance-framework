@@ -14,7 +14,7 @@
 
 ## 0 · The skeleton in one picture
 
-![Complete architecture diagram](架构图.png)
+![Complete architecture diagram](架构图-en.png)
 
 <details><summary>Text version (aligned in monospace terminals)</summary>
 
