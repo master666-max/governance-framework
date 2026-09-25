@@ -6,7 +6,8 @@
 > (audit-kit) + Evolution Core (evocore) + Memory Library (memsys) + Micro-kernel (evo-seat) +
 > Assembler (build) + Gates & Cross-check (tools) + Release Face (skill).
 > Pure Python standard library, **zero third-party dependencies**; every module ships its own
-> unittest suite. Module relationships are taken from a measured survey dated 2026-09-25
+> unittest suite. License: **MIT** (see `LICENSE`). Module relationships are taken from a
+> measured survey dated 2026-09-25
 > (320 AST import edges + Tarjan cycle detection).
 > Further reading: `ARCHITECTURE-定版v1.0-20260923.md` (concept charter, in Chinese) →
 > `架构图-20260923.md` (full architecture chart, in Chinese).
