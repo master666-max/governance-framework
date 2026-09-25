@@ -63,13 +63,32 @@ Governance Core never imports the Evolution Core. Their only junction is the fin
 function — memory-content integrity is verifiable from the governance side, while the two
 code bases stay fully decoupled ("united execution, evidence from separate roots").
 
-## 2 · Memory Library (memsys — the living assembly demo of the two cores, 7 files)
+## 2 · Memory Library (memsys) — the currently attached host (7 files)
 
 The bridge (`bridge.py`) imports capability + ledger from the Governance Core and the
 content fingerprint from the Evolution Core, gluing the two cores into a working memory
 library — proof that "the two cores assemble" is not a slide. Touch either core and the
 bridge plus its 17 tests notice immediately. The type registry (`kinds.yml`) is
 cross-checked against the bridge's built-in table by `tools/tools_crosscheck.py`.
+
+### The essence of a host: replaceable — and governable because of it
+
+A **host** is the governed executor: the layer that actually holds content and performs
+writes. The Memory Library (memsys) is not the system itself — it is merely **the currently
+attached host instance**, the first assembly demo.
+
+The two cores know **nothing** about the host; they connect through four contact points:
+① present a **capability** before writing (issued by the Governance Core);
+② pass the content through the **fingerprint** (computed by the Evolution Core);
+③ append the event to the **ledger** (Governance Core);
+④ expose state for **cross-checking** (Gates & Cross-check).
+
+⇒ **Generality**: any system satisfying these four contact points — an LLM wiki, an artifact
+library, a database, workflow auditing, any agent's knowledge base — can be a host.
+⇒ **Replaceability**: swap the host and the two cores change nothing, the gates change
+nothing (at most one adapter), and every governance enforcement keeps working. The
+governance seat lives outside the library and is not parasitic on the host — that is why
+swapping hosts is so cheap.
 
 ## 3 · Assembler (build — one codebase, four package forms, 34 files)
 
@@ -112,8 +131,8 @@ delete it.
 ## 7 · One-sentence summary
 
 **The Evolution Core keeps memory alive; the Governance Core keeps the ledger of behavior;
-the Memory Library proves the two cores assemble; the Assembler proves they assemble into
-four forms; Gates & Cross-check trust nothing.**
+the Memory Library is just the current host — hosts change, governance does not; the
+Assembler proves they assemble into four forms; Gates & Cross-check trust nothing.**
 
 ## Tests
 
