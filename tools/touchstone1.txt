@@ -1,0 +1,41 @@
+# -*- coding: utf-8 -*-
+"""touchstone1.txt — 试金石#1：sota-memory-radar.md（66行·短小简单）
+按阶段2规则提取断言入 claim_ledger.csv。EXPERIMENT=RADAR（文献雷达主题，
+非实验文档）。status 初值 open（交叉验证留待阶段2/3）。"""
+import os
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ns = {}
+exec(compile(open(os.path.join(AUD, "tools", "ledger_tool.txt"), encoding="utf-8").read(), "ledger_tool", "exec"), ns)
+ledger_add = ns["ledger_add"]
+
+SRC = "knowledge/references/sota-memory-radar.md"
+EID = "RADAR"
+
+# (line, quote, claim_type, status)
+claims = [
+    (12, "MemGPT/Letta (2310.08560) | 主上下文/外部存储分层，LLM 自编辑记忆 | ✅ 已吸收：三级加载 + 常驻预算制（D-003）", "verdict", "open"),
+    (19, "Mem0 (2504.19413) | 抽取→整合→双写（向量+图）；省 90% token、91% 延迟", "parameter", "open"),  # 自报数字 EXTERNAL-CLAIM
+    (20, "Memory-R1 (2508.19828) | RL 训练记忆管理器：ADD/UPDATE/DELETE/NOOP + 检索蒸馏 | ⏸ 观察：思想已用（wrap-up 六步即手动版管理器）；RL 不适用单人库", "verdict", "open"),
+    (26, "HippoRAG 1/2 (2405.14831/2502.14802) | 海马体索引理论：PPR 扩散激活 + 段落整合；非参数持续学习 | ✅ 已吸收：search_knowledge 邻居一跳折半 = PPR 简化版", "verdict", "open"),
+    (36, "Reflexion (2303.11366) | 失败后语言化自省存入情景记忆，下次重试参考 | ✅ 已吸收：pitfalls 强制根因分析；可加强：任务失败时显式写「自省段」入 trajectory", "verdict", "open"),
+    (41, "MemoryBank (2305.10250) | 艾宾浩斯遗忘曲线管理记忆强度，日总结链 | ✅ 已吸收：30 天未验证归档、12 个月冷处理", "verdict", "open"),
+    (48, "MemAgent (2507.02259) | RL 训练固定长度记忆分页处理 3.5M token，95%+ 针叶级精度", "parameter", "open"),  # 自报数字 EXTERNAL-CLAIM
+    (55, "Anthropic memory tool (platform.claude.com) | 客户端持久记忆目录 + /memory 工具 + context editing | ✅ 已吸收：文件库即客户端记忆；compaction 原则进 D-003", "verdict", "open"),
+    (59, "1. 条目总数 > 100：重评向量检索（B 派管线 + C 派图索引）", "hypothesis", "open"),
+    (66, "- v1（2026-09-04）：16 信源初版（12 论文 + 3 官方文档 + 1 搜索页）；累计 21 信源（含 v3/v4 已研 5+8 篇）", "parameter", "open"),
+]
+
+for line, quote, ctype, status in claims:
+    cid, res = ledger_add(SRC, line, quote, ctype, EID, "document", status)
+    print(f"{res:10s} {cid[:16]}  {SRC}:{line}  [{ctype}]")
+
+# 幂等性验证：重跑同一批，应全部 duplicate
+print("--- 幂等性验证（重跑应全 duplicate）---")
+dup_ok = True
+for line, quote, ctype, status in claims:
+    cid, res = ledger_add(SRC, line, quote, ctype, EID, "document", status)
+    if res != "duplicate":
+        dup_ok = False
+        print("幂等失败:", line)
+print("幂等性:", "PASS" if dup_ok else "FAIL")

@@ -1,0 +1,35 @@
+# 中库 kind 注册（开放集，宿主侧 · 起步集——随库生长，由库运营者维护）
+
+> 依据：SPEC §B-2（kind 注册=宿主三件事之一）；格式与 `memsys/kinds.yml` 同族（YAML 子集：
+> 两空格缩进的 `name:` 声明行 + 四空格字段）。本件是**中库模板的起步集**——够跑通四命令，
+> 不够就加（开放集，多声明不罚）。
+version: 1
+kinds:
+  entry_append:
+    description: "条目写入留痕（含 content_hash 幂等键）"
+    actor_pattern: "kb:cli|import:pipeline"
+    authority_level: 1
+  retrieve_hit:
+    description: "检索命中留痕（last_used 刷新的账面依据）"
+    actor_pattern: "kb:cli"
+    authority_level: 1
+  promotion:
+    description: "条目 intermediate → longterm 晋升事件"
+    actor_pattern: "kb:cli|llm:*|fallback:rule"
+    authority_level: 3
+  attic_nomination:
+    description: "回退=移 attic 并登记（禁销毁式回退）"
+    actor_pattern: "kb:cli|human:*"
+    authority_level: 2
+  tombstone:
+    description: "墓碑：标记后退出检索但原位保留（审计窗口）"
+    actor_pattern: "kb:cli|human:*"
+    authority_level: 2
+  memory_adjudicate:
+    description: "冲突/合并/晋升三 intent 判定（留痕结构强制）"
+    actor_pattern: "llm:*|fallback:rule"
+    authority_level: 3
+  human_override:
+    description: "人工推翻机器判定（S8-4 人侧仲裁通道；终裁不删历史）"
+    actor_pattern: "human:*"
+    authority_level: 4

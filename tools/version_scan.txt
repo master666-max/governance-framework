@@ -1,0 +1,46 @@
+# -*- coding: utf-8 -*-
+"""version_scan.txt — 阶段1 版本谱系机械扫描
+扫各 library-bootstrap* 目录中的版本声明（VERSION 常量 / RELEASE.md / README 头部），
+输出各包自报版本+关键文件 sha256，供版本谱系表构建。"""
+import os, re, hashlib, json
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+PACKS = [d for d in os.listdir(ROOT) if d.startswith("library-bootstrap") and os.path.isdir(os.path.join(ROOT, d))]
+PACKS += ["库调试工作区", "库调试v3.2"]
+
+out = []
+for pack in sorted(PACKS):
+    rec = {"pack": pack, "version_lines": [], "key_hashes": {}}
+    # 1) 引擎/自报版本行
+    for dirpath, dirnames, filenames in os.walk(os.path.join(ROOT, pack)):
+        dirnames[:] = [d for d in dirnames if d not in {".git", "__pycache__", "attic", "attic_upgrade_v39", "sandbox", "node_modules"}]
+        for fn in filenames:
+            fp = os.path.join(dirpath, fn)
+            rel = os.path.relpath(fp, os.path.join(ROOT, pack)).replace("\\", "/")
+            ext = os.path.splitext(fn)[1].lower()
+            if ext in (".py",) or fn in ("RELEASE.md", "README.md", "spec.md", "state.json"):
+                try:
+                    with open(fp, encoding="utf-8", errors="replace") as f:
+                        for i, line in enumerate(f, 1):
+                            if re.search(r"(^|\s)(VERSION\s*=|版本[：:]\s*v?\d|v\d+\.\d+)", line) and len(line) < 200:
+                                if re.search(r"v?\d+\.\d+", line):
+                                    rec["version_lines"].append(f"{rel}:{i}: {line.strip()[:150]}")
+                except OSError:
+                    pass
+            if fn in ("bootstrap_v3.py", "bootstrap.py", "bootstrap_v3.8.2_补丁后.py"):
+                h = hashlib.sha256()
+                with open(fp, "rb") as f:
+                    for b in iter(lambda: f.read(1 << 20), b""):
+                        h.update(b)
+                rec["key_hashes"][f"{rel}"] = h.hexdigest()[:16]
+    rec["version_lines"] = rec["version_lines"][:25]
+    out.append(rec)
+
+with open(os.path.join(ROOT, "workspace-audit", "data", "version_scan.json"), "w", encoding="utf-8") as f:
+    json.dump(out, f, ensure_ascii=False, indent=1)
+for rec in out:
+    print("=" * 10, rec["pack"])
+    for v in rec["version_lines"][:6]:
+        print("  ", v)
+    for k, h in rec["key_hashes"].items():
+        print("   HASH", k, h)

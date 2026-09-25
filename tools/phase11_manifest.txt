@@ -1,0 +1,64 @@
+# -*- coding: utf-8 -*-
+"""phase11_manifest.txt — 红队交接包构建（spec 阶段11.5）
+red-team-input-manifest.csv：{kind, key, value} 三节：
+  already-sampled=audit-log 已抽全部 claim_id（红队独立抽检必须避开）
+  stat-command=终报统计命令全列（红队复现用）
+  ledger-snapshot=各账本行数+sha256 终态快照
+"""
+import csv, io, hashlib
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+rows = []
+
+# 1) 已抽 claim_id（audit-log 全量，含 P0-P6 各 phase）
+with io.open(AUD + r"\audit-log.csv", encoding="utf-8-sig", newline="") as f:
+    alog = list(csv.DictReader(f))
+for r in alog:
+    rows.append({"kind": "already-sampled", "key": r["claim_id"],
+                 "value": "phase=%s result=%s" % (r["phase"], r["result"])})
+
+# 2) 统计命令全列
+CMDS = [
+    "py -X utf8 workspace-audit/tools/ledger_tool.txt count",
+    "py -X utf8 workspace-audit/tools/phase5_zones.txt > workspace-audit/data/phase5-summary.txt",
+    "py -X utf8 workspace-audit/tools/phase6_build.txt",
+    "py -X utf8 workspace-audit/tools/phase6_spotcheck.txt",
+    "py -X utf8 workspace-audit/tools/phase7_grade.txt > workspace-audit/data/phase7-summary.txt",
+    "py -X utf8 workspace-audit/tools/phase8_matrix.txt > workspace-audit/data/phase8-summary.txt",
+    "py -X utf8 workspace-audit/tools/phase9_status.txt > workspace-audit/data/phase9-summary.txt",
+    "py -X utf8 workspace-audit/tools/phase11_stats.txt",
+    "wc -l workspace-audit/claim_ledger.csv workspace-audit/lit-ledger.csv workspace-audit/incident-log.csv workspace-audit/lm-matrix.csv workspace-audit/tree_edges.csv workspace-audit/delta-baseline.csv",
+    "sha256sum workspace-audit/*.csv",
+    "git -C . log --oneline -20",
+]
+for i, c in enumerate(CMDS, 1):
+    rows.append({"kind": "stat-command", "key": "cmd-%02d" % i, "value": c})
+
+# 3) 账本终态快照
+LEDGERS = ["claim_ledger.csv", "alias_map.csv", "tree_edges.csv", "lit-ledger.csv",
+           "incident-log.csv", "ordering-claims.csv", "ghost-papers.csv",
+           "mechanism-registry.csv", "lm-matrix.csv", "supersede_log.csv",
+           "audit-log.csv", "delta-baseline.csv", "ghost_list.csv", "participants.csv",
+           "99-MAP.md", "archive-plan.md"]
+for fn in LEDGERS:
+    p = AUD + "\\" + fn
+    with io.open(p, encoding="utf-8-sig") as f:
+        n = sum(1 for _ in f)
+    h = hashlib.sha256()
+    with io.open(p, "rb") as f:
+        h.update(f.read())
+    rows.append({"kind": "ledger-snapshot", "key": fn,
+                 "value": "lines=%d sha256=%s" % (n, h.hexdigest()[:16])})
+
+with io.open(AUD + r"\red-team-input-manifest.csv", "w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["kind", "key", "value"])
+    w.writeheader()
+    w.writerows(rows)
+
+# 统计
+import collections
+cc = collections.Counter(r["kind"] for r in rows)
+print("manifest rows=%d %s" % (len(rows), dict(cc)))
+print("NOTE: red-team-input-manifest.csv 自身哈希不可自含，其终态哈希以 git commit 为准")

@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+"""gap_scan.txt — 阶段2收尾：全树叙事文件 − 已入账文件 = 待提取清单
+排除：非实验项目区/引擎发布包/引擎部署内部状态/数据与代码（边界登记见 progress.md）
+"""
+import os, csv
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+covered = set()
+with open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig") as f:
+    for row in csv.DictReader(f):
+        covered.add(row["source_file"])
+
+# 顶层目录边界：非自演化实验宇宙的项目区 + 基础设施
+SKIP_TOP = {"workspace-audit", ".git", "语料分析", "迷深清洗工作", "mepub",
+            "comfyui-docx-scratch", "实验性双库工作区", "attic", "archive",
+            "soul", "tools", "workspace", "库调试v3.2", "库调试工作区", "_l8_lab"}
+PKG_PREFIX = tuple(d for d in os.listdir(ROOT) if d.startswith("library-bootstrap"))
+# 引擎部署内部状态目录（模板/数据/账本本体），叙事文件在根与 references/evals/audit
+SKIP_SUB = {"__pycache__", "node_modules", "attic_upgrade_v39", "experimental",
+            "experimental-l8", "experimental-l9", "modules", "adapters", "skills",
+            "ledger", "memory", "presets"}
+# 数据/代码后缀与目录
+DATA_DIRS = {"runs", "sandbox", "unified", "自演化离线实验", "自演化离线实验_v3",
+             "自演化离线实验_v4", "candidates", "docs" if False else "candidates"}
+CODE_EXT = (".py", ".js", ".json", ".jsonl", ".tsv", ".zip", ".7z")
+
+out = []
+for dirpath, dirnames, filenames in os.walk(ROOT):
+    rel = os.path.relpath(dirpath, ROOT).replace("\\", "/")
+    top = rel.split("/")[0] if rel != "." else ""
+    if top in SKIP_TOP:
+        dirnames[:] = []
+        continue
+    if rel == ".":
+        dirnames[:] = [d for d in dirnames if not d.startswith("library-bootstrap")]
+    dirnames[:] = [d for d in dirnames if d not in SKIP_SUB and d not in (".git", "__pycache__")]
+    for fn in filenames:
+        if not fn.endswith((".md", ".txt", ".csv")):
+            continue
+        rp = fn if rel == "." else rel + "/" + fn
+        if rp in covered:
+            continue
+        # 数据目录产物与代码跳过
+        seg = rp.split("/")
+        if any(s in DATA_DIRS for s in seg[:-1]):
+            continue
+        out.append(rp)
+
+for p in sorted(out):
+    print(p)
+print("TOTAL", len(out))

@@ -1,0 +1,31 @@
+{
+  "aggregate_sha": "fa499bae537c9ce6846d25fe9bb6985fcb11a97993bb8ed811aa9865e894358d",
+  "conformance": [
+    {
+      "exit": 0,
+      "passed": 14,
+      "target": "<out>/fused/evo_seat.py",
+      "total": 14,
+      "what": "conformance --fused"
+    }
+  ],
+  "files": {
+    "evo_seat.py": "6a76e1cbd80ffd7a897475f76cbff5758d6fd0e9622006570a77d99e5bdd3c20",
+    "framework_segment.txt": "622110a5af2cc4d7dc5e7a08ce2ab6a5c17fcc9d6242030e351d26513fcd2122"
+  },
+  "form": "fused",
+  "schema_version": 1,
+  "segment": {
+    "bytes": 15875,
+    "chars": 13682,
+    "file": "framework_segment.txt",
+    "sha256": "622110a5af2cc4d7dc5e7a08ce2ab6a5c17fcc9d6242030e351d26513fcd2122"
+  },
+  "sources": {
+    "evo_seat.py": "evo-seat/evo_seat.py"
+  },
+  "spec": "SPEC-内核接口与宿主契约-v1+v1.1增补-20260924",
+  "versions": {
+    "evo-seat": "0.2.2"
+  }
+}

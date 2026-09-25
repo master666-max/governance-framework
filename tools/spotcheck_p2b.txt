@@ -1,0 +1,70 @@
+# -*- coding: utf-8 -*-
+"""spotcheck_p2b.txt — 阶段2收尾（六批次）锚点抽检：
+从本阶段新入账断言中机械抽取 claim_id 尾数逢 7 者（不足 10 条全抽），
+逐条回原文核对 verbatim_quote 是否逐字存在于锚点位置，结果记 audit-log.csv。
+"""
+import os, sys, json, csv, hashlib, datetime
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+def make_claim_id(source_file, line, quote):
+    key = f"{source_file}|{line}|{quote[:80]}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+# 1. 重建六批次的 (claim_id -> 定位信息)，复算程序化截取
+rows = {}
+for name in ["know", "sim3", "part2", "oreal", "deploy", "ds2"]:
+    with open(os.path.join(AUD, "data", "extract", name + ".jsonl"), encoding="utf-8") as f:
+        for raw in f:
+            raw = raw.strip()
+            if not raw:
+                continue
+            r = json.loads(raw)
+            fp = os.path.join(ROOT, r["file"])
+            with open(fp, encoding="utf-8", errors="replace") as fh:
+                text = fh.readlines()[r["line"] - 1].rstrip("\r\n")
+            i = text.find(r["start_anchor"])
+            j = text.find(r["end_anchor"], i + len(r["start_anchor"]))
+            quote = text[i:j + len(r["end_anchor"])]
+            cid = make_claim_id(r["file"], r["line"], quote)
+            rows[cid] = (r, quote)
+
+# 2. 尾数逢 7 抽取
+picked = [cid for cid in rows if cid.endswith("7")]
+if len(picked) < 10:
+    picked = list(rows)  # 全抽
+print(f"本阶段新断言 {len(rows)} 条，尾数逢7 {len([c for c in rows if c.endswith('7')])} 条，抽检 {len(picked)} 条")
+
+# 3. 逐条回原文核对（独立第二次读取，非复用截取缓存）
+hit = miss = 0
+log_rows = []
+for cid in picked:
+    r, quote = rows[cid]
+    fp = os.path.join(ROOT, r["file"])
+    ok = False
+    reason = ""
+    try:
+        with open(fp, encoding="utf-8", errors="replace") as fh:
+            text = fh.readlines()[r["line"] - 1].rstrip("\r\n")
+        ok = quote in text and text.find(r["start_anchor"]) >= 0
+        if not ok:
+            reason = f"quote 不在第{r['line']}行"
+    except OSError as e:
+        reason = str(e)[:60]
+    log_rows.append([cid[:16], "命中" if ok else "未命中", reason,
+                     datetime.datetime.now().isoformat(timespec="seconds"), "2b"])
+    if ok:
+        hit += 1
+    else:
+        miss += 1
+
+# 4. 记 audit-log.csv（追加，不读改旧行）
+with open(os.path.join(AUD, "audit-log.csv"), "a", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    for row in log_rows:
+        w.writerow(row)
+
+rate = hit / (hit + miss) * 100 if (hit + miss) else 0
+print(f"命中 {hit} / 未命中 {miss}，命中率 {rate:.1f}%")
+print("已追加 audit-log.csv（phase=2b）")

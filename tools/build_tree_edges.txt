@@ -1,0 +1,433 @@
+# -*- coding: utf-8 -*-
+"""阶段3 分支树建边：tree_edges.csv 构建脚本（workspace-audit/tools/build_tree_edges.txt）
+用法: py -X utf8 tools/build_tree_edges.txt
+输入: claim_ledger.csv / data/tree-nodes.csv
+输出: tree_edges.csv（from_id,to_id,relation,anchor,evidence_quote,INFERRED,inferred_reason）
+纪律: 每条边 anchor 逐字存在于 claim_ledger.location_anchor；from/to ∈ tree-nodes ∪ 宇宙枢纽；
+      relation ∈ 7 值；时间线纪律自检（from 发生时间 ≥ to）。
+"""
+import csv, sys, re
+from collections import Counter, defaultdict
+
+BASE = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+HUBS = {"SIM","REAL","R2","R2A","DS","PART2","VERIF","DB","CB","GLM","QWEN","KB",
+        "PART1","L8LAB","DEPLOY","META","REVIEW","SYN","PLAN","RADAR"}
+RELATIONS = {"motivated_by","replicates","extends","refutes","supersedes","contradicts","forked_from"}
+TIME_SAFE = {"motivated_by","replicates","extends","forked_from","supersedes"}  # 需 from ≥ to
+
+# ---------- 载入 ----------
+ledger = {}
+with open(f"{BASE}/claim_ledger.csv", encoding="utf-8") as f:
+    for r in csv.DictReader(f):
+        ledger[r["location_anchor"]] = r
+
+nodes = set()
+node_anchor = defaultdict(list)   # experiment_id -> [anchor]
+node_universe = {}
+with open(f"{BASE}/data/tree-nodes.csv", encoding="utf-8") as f:
+    for r in csv.DictReader(f):
+        nodes.add(r["experiment_id"]); node_universe[r["experiment_id"]] = r["universe"]
+for a, r in ledger.items():
+    node_anchor[r["experiment_id"]].append(a)
+for k in node_anchor:
+    node_anchor[k].sort()
+
+def first_anchor(eid):
+    return node_anchor[eid][0] if node_anchor.get(eid) else None
+
+E = []  # (from, to, relation, anchor, INFERRED, reason)
+def edge(f, t, rel, anchor, inf, reason):
+    E.append((f, t, rel, anchor, inf, reason))
+
+# ---------- 1. 宇宙级枢纽边（实体总表 §三） ----------
+edge("REAL","SIM","replicates","大审查/衔尾蛇/reports/X1_静态基线.md:3","no",
+     "实体总表§三：SIM→REAL 复现/检验关系；X1 实测复现报告代码审查三探针预测（规划书使命=复现并检验混元报告主张）")
+edge("REAL","SIM","refutes","大审查/zcode/自演化实验总树与总报告-全轮次.md:57","no",
+     "实体总表§三：REAL→SIM 多处未复现/翻案（总树:57 E7 缩水——戏剧性分离是人工地形产物）")
+edge("DS","SIM","replicates","库调试工作区/references/两轴模型与演化授权-v1.md:4","no",
+     "实体总表§三：两轴模型称三线交叉验证——DeepSeek 线独立复现")
+edge("REAL","DS","replicates","大审查/deepseek/DeepSeek交接验收报告-衔尾蛇线验收.md:23","no",
+     "实体总表§三：DS↔REAL 独立复现；衔尾蛇线验收 DS 交接，独立收敛结论三线互证（R1-1 复现✓）。时序说明：验收报告针对 DS 已完成的 v3.1.0 交接基线（R1-R5 后出具），from 晚于 to，非倒流")
+edge("VERIF","SIM","replicates","猴子记忆库推演/reports/00-验证总报告.md:122","no",
+     "实体总表§三：VERIF→SIM 逐条构造性复现（三态总表：证实26/部分3/已修1/证伪0/无法验证11+）")
+
+# ---------- 2. SIM 宇宙内部修正/推翻/复现链 ----------
+edge("SIM-E14C","SIM-E14","refutes","大审查/混元/bootstrap_自演化推演_第四轮.md:244","no",
+     "E14c 自我证伪：近因加权是毒，第三轮建议在漂移下放大污染")
+edge("SIM-E24","SIM-E10","supersedes","猴子记忆库推演/自演化推演_实验总报告17轮后.md:630","no",
+     "E24 修正 E10：任何影响'是否被采纳'的参数必须冻结，或只能朝更严格方向演化")
+edge("SIM-E28","SIM-E23","refutes","猴子记忆库推演/自演化推演_实验总报告17轮后.md:202","no",
+     "E28 层次化归并远差于平铺（0.12 vs 0.90），推翻 E23 建议")
+edge("SIM-E31","SIM-E8","refutes","猴子记忆库推演/自演化推演_实验总报告17轮后.md:205","no",
+     "E31 留出集轮换未复现 E8 膨胀，结论不成立")
+edge("SIM-E36","SIM-E29b","replicates","大审查/混元/bootstrap_自演化推演_第八轮.md:88","no",
+     "E36 证实 E29b：margin 过大（0.15）致命——120 代零采纳，演化完全停摆")
+edge("SIM-E38","SIM-E9","refutes","大审查/混元/bootstrap_自演化推演_第九轮.md:85","no",
+     "E38 标注条数与终局效用不单调（20条>50条），与 E9（样本越多τ越高）矛盾")
+edge("SIM-E59","SIM-E48","refutes","大审查/混元/bootstrap_自演化推演_第十三轮.md:79","no",
+     "E59 等预算下 E48'多岛 +29%'未被复现（12 种子噪声 ±0.05）")
+edge("SIM-E65","SIM-E29b","replicates","大审查/混元/bootstrap_自演化推演_第十四轮.md:106","no",
+     "margin_large 复现 E29b：margin 过大导致完全停摆（+0.0000=零采纳）")
+edge("SIM-E67","SIM-E3","contradicts","大审查/混元/bootstrap_自演化推演_第十五轮.md:51","no",
+     "E67 伪特征场景开护栏反而略差（−0.0065），与 E3（留出集门防过拟合）矛盾")
+edge("SIM-E68","SIM-E66","supersedes","大审查/混元/bootstrap_自演化推演_第十五轮.md:78","yes",
+     "机械推断链：E66(14轮:58)断言'不要逐参数独立调优'（列 E30/E55/E36 组合风险）；E68(15轮:78)实测参数交互极弱（联合仅高 0.006，噪声内）'独立调优不是问题'→修正 E66")
+edge("SIM-E88","SIM-E86","refutes","大审查/混元/bootstrap_自演化推演_第十九轮.md:138","yes",
+     "机械推断链：E86(18轮:80)结论'维度稀释危险'（维度64 真值为正）；19轮 E88 推翻修正57——'维度是否稀释取决于算子协调性，真实系统维度越多越危险'，主题即 E86 的维度稀释结论")
+edge("SIM-E93","SIM-E64","supersedes","大审查/混元/bootstrap_自演化推演_第二十轮.md:50","no",
+     "E93 修正 E64 的注意力门槛：150 → 300（judge 可被操纵时的现实值）")
+edge("SIM-E95","SIM-E87","replicates","大审查/混元/bootstrap_自演化推演_第二十轮.md:90","no",
+     "盲评开启后 −0.0035 → +0.0127，是 E87 在真实世界的复现")
+edge("SIM-E95","SIM-E55","contradicts","大审查/混元/bootstrap_自演化推演_第二十轮.md:98","no",
+     "tol 与 E55 矛盾：tol=0.15（宽松）最好 +0.0412，而 E55 推荐 0.02–0.06")
+edge("SIM-E105","SIM-E97b","supersedes","大审查/混元/bootstrap_自演化推演_第二十二轮.md:153","no",
+     "E105 修正 E97b：审计的收益不是无条件的，它依赖变异幅度")
+edge("SIM-E115","SIM-E108","contradicts","大审查/混元/bootstrap_自演化推演_第二十四轮.md:131","no",
+     "E115 复合世界 v4-B +0.053 < v4-A +0.069，与 E108（单一污染世界 v4-B 远大于 v4-A）完全相反")
+edge("SIM-E125","SIM-E112","replicates","大审查/混元/P0验证_展示权重爆炸.md:33","no",
+     "E112 的'审计没拦住'复现：回退 0 次而 surf 已到 11.4")
+edge("SIM-E125","SIM-E112","supersedes","大审查/混元/P0验证_展示权重爆炸.md:6","no",
+     "现象真实但定性需重大修正：解药不是新机制，而是已有的盲评")
+edge("SIM-WEB-E132","SIM-E27","supersedes","大审查/混元/bootstrap_自演化推演_第二十八轮-网页端.md:47","no",
+     "网页端 E132：回滚后停止是最差策略（t=−5.76）——E27 说它略好")
+edge("SIM-WEB-E133","SIM-E27","supersedes","大审查/混元/bootstrap_自演化推演_第二十八轮-网页端.md:130","no",
+     "E27'可回滚不是主要应对'——反了：corrupt 下它是最强的单一机制")
+edge("SIM-WEB-R28","SIM-R28","refutes","大审查/混元/bootstrap_自演化推演_第二十八轮-网页端.md:153","no",
+     "网页端 44 对重测本地第二十八轮：三条阴性结论全错，其中两条方向相反（2a 已撤回）")
+edge("KB-TASK-024","SIM-R28","supersedes","knowledge/trajectories/2026-09-09/task-024-混元实验接手.md:32","no",
+     "接手复核撤回本地报告 2a'rollback 无收益稳健'（基于被否的 exp27 缺陷实现，44 种子只是噪声镀金）")
+edge("KB-TASK-024","SIM-E131","replicates","knowledge/trajectories/2026-09-09/task-024-混元实验接手.md:12","yes",
+     "机械推断链：E131=strict 审计从'无效'改判'漂移下有害'（28轮:17）；task-024 复跑 P0-1 strict 反转 t=−2.60，证实该改判")
+edge("KB-TASK-024","SIM-WEB-E133","replicates","knowledge/trajectories/2026-09-09/task-024-混元实验接手.md:30","no",
+     "接手复跑证实：回退价值取决于退化原因且符号相反（corrupt +0.179 t=9.14 / drift −0.080 t=−4.52）")
+
+# ---------- 3. SIM 报告/工单版本链 ----------
+edge("SIM-SUM14","SIM-SUM","supersedes","大审查/混元/自演化推演_实验总报告-14轮后.md:3","yes",
+     "版本链机械推断：总报告初版（SIM-SUM）→14轮后版（66 实验/14 次推翻），轮数口径后者更高（1-版本谱系§三：版本号最高者优先）")
+edge("SIM-SUM23","SIM-SUM14","supersedes","大审查/混元/自演化推演_实验总报告23轮后.md:3","yes",
+     "版本链机械推断：14轮后（66 实验）→23轮后（110 实验/20 次推翻），同链递进")
+edge("SIM-SUM25","SIM-SUM23","supersedes","大审查/混元/自演化推演_实验总报告25轮后.md:3","yes",
+     "版本链机械推断：23轮后（110 实验）→25轮后（120 实验/23 次推翻），同链递进")
+edge("SIM-WO-V39","SIM-WO-V38","supersedes","大审查/混元/v3.9bootstrap_v3_v4重构工单集.md:15","yes",
+     "工单版本链机械推断：v3.8 修复工单（33 张 BUG/ARCH）→v3.9 重构工单集；v3.9 以消掉 P0-4（并发丢更新 92%）为目标")
+
+# ---------- 4. DS 线 ----------
+edge("DS-R1-1","SIM-E16","replicates","大审查/deepseek/结果_R1-1_reward切换与灾难性遗忘.md:22","no",
+     "Pareto 历史档案防遗忘判别成立（6/6）——E16 灾难性遗忘/Pareto 缓解结论复现")
+edge("DS-R1-1","DS-H3","supersedes","大审查/deepseek/结果_R1-1_reward切换与灾难性遗忘.md:23","no",
+     "H3 状态更新：从'场景未达判别条件'升级为判别条件成立且 Pareto 收益实证")
+edge("DS-R1-1","DS-DESIGN","supersedes","大审查/deepseek/结果_批次R1_超详尽大报告.md:42","no",
+     "设计文档 F3 相应改判：PASS（条件满足时）")
+edge("DS-R1-2","SIM-E81","replicates","大审查/deepseek/结果_批次R1_超详尽大报告.md:66","no",
+     "晋升门金标=judge 时门退化为无门——E81'同源评审失效'在复合场景的复现")
+edge("DS-R1-3","SIM-REPORT","replicates","大审查/deepseek/结果_批次R1_超详尽大报告.md:19","yes",
+     "机械推断链：v3 两 P0（并发 accum 55/60、截断链/根静默）复现——P0 清单属混元总报告代码审查（'报告'按 DS 线引用口径解析为 17 轮后总报告 SIM-REPORT）")
+edge("DS-P3","SIM-E81","replicates","大审查/deepseek/结果_探针3_judge通道污染.md:22","no",
+     "E81 复现：锚定集/锚定审计来自同一个被表象污染的 judge 时 0 次触发")
+edge("DS-P3","SIM-E81c","replicates","大审查/deepseek/结果_探针3_judge通道污染.md:23","no",
+     "E81c 复现：周期性真值抽样（独立 rv 通道）在漂移后 ≤3 代内检出并回退")
+edge("DS-P6","SIM-E80","refutes","大审查/deepseek/结果_结项总报告_完整版.md:209","no",
+     "E80 护栏负交互（v4<v3）未复现，归因：单一主导改进+晋升门保守+审计 0 触发")
+edge("DS-P1","SIM-E16","contradicts","大审查/deepseek/结果_结项总报告_完整版.md:121","no",
+     "机制发现 M2：单参数顺序保持权重空间无法表达'改进A伤害B'的参数冲突——与 E16 参数冲突式遗忘机制表述相抵（需 judge 通道不随域更新才触发）")
+edge("DS-BATCH-R1","SIM-E16","replicates","大审查/deepseek/交接包_零损失/doc/batch_r1/结果_批次R1_超详尽大报告.md:43","no",
+     "Pareto 防遗忘 6/6（bestA=1.0）——E16 的 0.719 vs 0.547 在本检索空间复现")
+edge("DS-BATCH-R1","SIM-E81","replicates","大审查/deepseek/交接包_零损失/doc/batch_r1/结果_批次R1_超详尽大报告.md:68","no",
+     "晋升门金标=judge 时 bare==gatedJ-noAudit——E81 同源评审失效在复合场景复现")
+edge("DS-BATCH-R2","SIM-E57","replicates","大审查/deepseek/交接包_零损失/doc/batch_r2/结果_批次R2_超详尽大报告.md:28","no",
+     "E57 剂量化复现：corr 0→1 时 gated−bare 从 +0.028 单调降到 0（完全共享偏差时同化）")
+edge("DS-R2-N2","SIM-E57","replicates","大审查/deepseek/交接包_零损失/doc/batch_r2/结果_R2-N2_相关噪声剂量.md:17","no",
+     "E57 以剂量形式复现：相关噪声（共享偏差）侵蚀门控的信息优势")
+edge("DS-PROBE6","SIM-E80","refutes","大审查/deepseek/交接包_零损失/doc/结果_探针6_复合危险.md:19","no",
+     "E80 的护栏负交互（v4 劣于 v3）未复现（诚实归因）；H9 处置为增益有限、无额外伤害")
+edge("DS-REPORT","SIM-E80","refutes","大审查/deepseek/对外完整版总报告_v3.0.0.md:123","no",
+     "E80 负交互未复现（需更强复合+污染晋升门+采纳密集，已留证）")
+edge("DS-REPORT","DS-H3","supersedes","大审查/deepseek/对外完整版总报告_v3.0.0.md:102","no",
+     "F3 改判：判别条件成立时 PASS")
+edge("DS-REPORT","SIM-E81","motivated_by","大审查/deepseek/对外完整版总报告_v3.0.0.md:126","no",
+     "不可能性回应：无法同源自证（E81）→独立真值抽样+异质标注")
+edge("DS-REPORT","SIM-E78","motivated_by","大审查/deepseek/对外完整版总报告_v3.0.0.md:126","no",
+     "不可能性回应：无法自知失败（E78）→双通道 gap/τ 统计")
+edge("DS-REPORT","SIM-E64","motivated_by","大审查/deepseek/对外完整版总报告_v3.0.0.md:126","no",
+     "不可能性回应：自主性有注意力门槛（E64/H8）→预算账本，不足即关")
+edge("DS-FINAL","SIM-E81","replicates","大审查/deepseek/交接包_零损失/doc/结果_结项总报告_完整版.md:160","no",
+     "E81 复现：同源 judge 锚定审计 0 次触发，自报 0.67→0.77 而真值变差")
+edge("DS-FINAL","SIM-E81c","replicates","大审查/deepseek/交接包_零损失/doc/结果_结项总报告_完整版.md:161","no",
+     "E81c 复现：周期性真值抽样 ≤3 代检出并回退（5/8 种子触发）")
+edge("DS-FINAL","SIM-E80","refutes","大审查/deepseek/交接包_零损失/doc/结果_结项总报告_完整版.md:212","no",
+     "E80 护栏负交互未复现（单一主导改进采纳机会少+晋升门 hold=真值较保守+审计 0 触发）")
+edge("DS-STAT-PROTO","SIM-E81","replicates","大审查/deepseek/交接包_零损失/doc/结果_统计协议_full.md:33","no",
+     "能在任意水平稳定复现自报-真值分歧的机制需要'可演化的展示通道'（=探针 3 的 E81）")
+edge("DS-HANDOVER-PKG","SIM-E80","extends","大审查/deepseek/交接包_零损失/00_交接文档_零损失.md:187","no",
+     "边界声明（勿越界推广）：E80 负交互需更强复合+污染晋升门+采纳密集才可能触发")
+edge("DS-HANDOVER-PKG","SIM-REPORT","replicates","大审查/deepseek/交接包_零损失/00_交接文档_零损失.md:77","yes",
+     "机械推断链：并发 append accum 55/60（丢更新 P0-4 复现）+截断审计尾后链连续/根自洽——P0 清单属混元总报告（解析为 17 轮后口径 SIM-REPORT）")
+edge("DS-SUM-V2","DS-FINAL","supersedes","大审查/deepseek/交接包_零损失/doc/报告版本索引.md:18","no",
+     "报告版本索引：v2.0.0 滚动总报告合并 v1.0-1.3 全部结论（DS-FINAL=v1.0.0 结项总报告）")
+edge("DS-SUM-V31","DS-SUM-V2","supersedes","大审查/deepseek/交接包_零损失/doc/报告版本索引.md:16","yes",
+     "版本链机械推断：v2.0.0 滚动总报告 → v3.1.0 对外完整版（完整档案版），版本号最高者优先")
+
+# ---------- 5. REAL 线 ----------
+edge("REAL-X0","SIM-REPORT","replicates","大审查/衔尾蛇/reports/X0_环境自检与等价性.md:11","yes",
+     "机械推断链：复现源码 P0-1（71 自测只跑 9 即静默中止 rc=1）——P0 清单属混元总报告代码审查（衔尾蛇线以 17 轮后版为检验对象，解析为 SIM-REPORT）")
+edge("REAL-X0","SIM-E1","replicates","大审查/衔尾蛇/reports/X0_环境自检与等价性.md:29","no",
+     "演化自修复方向（降 w_imp/w_age、开 filter_zero）与报告 E1 预测一致")
+edge("REAL-X1","SIM-REPORT","replicates","大审查/衔尾蛇/reports/X1_静态基线.md:3","no",
+     "三探针全部复现报告代码审查的预测：并发丢更新 75%、截断攻击密码学层全盲、绕过引擎编辑被 doctor 抓")
+edge("REAL-X2c","SIM-E16","replicates","大审查/衔尾蛇/reports/X2bcd_防作弊遗忘重组.md:25","no",
+     "方向复现（Pareto 免疫、单一受损），效应量随冲突强度放大，但比 E16 的 0.547 vs 0.719 温和")
+edge("REAL-X3","SIM-E14","replicates","大审查/衔尾蛇/reports/X3_危险矩阵.md:3","no",
+     "报告 E14 的最深发现在真引擎完整复现：评判者被腐蚀时门控与无门控行为一致（8/8 vs 8/8）、内部指标全绿")
+edge("REAL-X3","SIM-E3","refutes","大审查/衔尾蛇/reports/X3_危险矩阵.md:3","no",
+     "伪特征危险（E3）在检索域未复现（机制诊断清楚，结构性免疫）")
+edge("REAL-X3","SIM-E57","refutes","大审查/衔尾蛇/reports/X3_危险矩阵.md:37","no",
+     "相关噪声未复现 E57 的'击穿双门'（−50% 级）")
+edge("REAL-X3","REAL-PLAN","refutes","大审查/衔尾蛇/reports/总报告.md:28","yes",
+     "机械推断链：H2 门控必要性按预注册口径证伪——H1/H2 矩阵预注册于规划书 v1.1（REAL-PLAN:49 对照组矩阵）")
+edge("REAL-X3c","SIM-E80","refutes","大审查/衔尾蛇/reports/总报告.md:99","no",
+     "E80 护栏负交互未复现：G4 +1.2367 ≥ G2 +1.1867")
+edge("REAL-X5","SIM-E14","replicates","大审查/衔尾蛇/reports/总报告.md:100","no",
+     "评判者腐蚀（高宣称词偏好代理）下 G2 与 G4 行为仍一致——E14 方向第三度复现")
+edge("REAL-X6","SIM-REPORT","motivated_by","大审查/衔尾蛇/reports/总报告.md:112","yes",
+     "机械推断链：'发明新启发式 0/3 vs 测量已有可观测量 3/3'——17 轮报告总法则的第六次独立验证（法则出处解析为 SIM-REPORT）")
+edge("REAL-X6c","SIM-E32","refutes","大审查/衔尾蛇/reports/第三轮_X6_库内容推演.md:41","no",
+     "E32 未在真实小库复现，且方向反转")
+edge("REAL-W3","REAL-X0","replicates","大审查/衔尾蛇/reports/v3.9_法层参数与引擎修复工单.md:43","no",
+     "71 个自测只跑 9 个即静默退出（rc=1），本沙盒 X0-S2 复现")
+edge("REAL-TREE-ZC","SIM-E2","replicates","大审查/zcode/自演化实验总树与总报告-全轮次.md:45","no",
+     "纯贪婪（w_imp=10/100）连 G2 最宽门都进不去、w_imp 扫描单调不升——E2 复现")
+edge("REAL-TREE-ZC","SIM-E16","replicates","大审查/zcode/自演化实验总树与总报告-全轮次.md:47","no",
+     "单一 0.981，差距随冲突系数 0.08→0.25 放大——E16 方向复现+边界细化")
+edge("REAL-TREE-ZC","SIM-E7","refutes","大审查/zcode/自演化实验总树与总报告-全轮次.md:57","no",
+     "E7 戏剧性分离是人工地形产物：真引擎仅浅谷（6/8），strict 7/8 自愈")
+edge("REAL-TREE-ZC","SIM-E57","refutes","大审查/zcode/自演化实验总树与总报告-全轮次.md:56","no",
+     "相关噪声未击穿双门（E57 未复现，构造强度不足如实登记）")
+edge("REAL-TREE-ZC","SIM-E80","refutes","大审查/zcode/自演化实验总树与总报告-全轮次.md:62","no",
+     "E80 护栏负交互未复现（G4 +1.2367 ≥ G2 +1.1867）")
+edge("REAL-TREE-ZC","SIM-REPORT","motivated_by","大审查/zcode/自演化实验总树与总报告-全轮次.md:131","yes",
+     "机械推断链：17 轮（12 条证伪）+衔尾蛇 R5（0/3 vs 3/3）=总法则第 6 次独立验证（法则出处解析为 SIM-REPORT）")
+edge("REAL-总树","SIM-E14","replicates","knowledge/trajectories/2026-09-08/task-020-自演化沙盒.md:6","no",
+     "232 run：H1 24 种子坐实（+1.22），E14 门控盲区复现，锚定审计升 P0")
+edge("REAL-总树","SIM-REPORT","motivated_by","knowledge/trajectories/2026-09-08/task-020-自演化沙盒.md:36","yes",
+     "机械推断链：新启发式 0/3 vs 测量已有量 3/3——总法则第六次独立验证（17 轮报告口径）")
+edge("REAL-TREE-ZC","REAL-TREE-SNAP","supersedes","大审查/zcode/自演化实验总树与总报告-全轮次.md:98","yes",
+     "版本链机械推断：总树 zcode 现行版（REAL-TREE-ZC，持续修订）取代衔尾蛇 attic 冻结快照副本（REAL-TREE-SNAP，2026-09-09 冻结、副本不回灌）")
+edge("REAL-WO-V39-ZC","REAL-WO-V39-SNAP","supersedes","大审查/zcode/v3.9_法层参数与引擎修复工单.md:92","yes",
+     "版本链机械推断：v3.9 工单 zcode 版（含 W-1 默认值被真实库否决→修订版 c265530d、filter_zero 默认回撤 0）取代 attic 冻结快照版")
+edge("REAL-ACCEPT-HY","SIM-HANDOVER","replicates","大审查/衔尾蛇/attic/衔尾蛇副本-冻结快照-20260909/reports/混元交接验收报告.md:10","no",
+     "衔尾蛇线对混元交接包独立复核：交接无损——内核 PASS 27 / FAIL 0（独立复核 10/10）")
+edge("SIM-HANDOVER-ACCEPT","SIM-HANDOVER","replicates","大审查/混元/混元交接验收报告-衔尾蛇线验收.md:33","no",
+     "独立收敛点（两级门控/锚定不衰减/实测重要度/停摆=零采纳/预算门槛）——同左（真引擎复现）")
+edge("DEPLOY-V39","REAL-X5","contradicts","knowledge/trajectories/2026-09-08/task-020-自演化沙盒.md:45","no",
+     "filter_zero=1 首应用 recall@5 劣化 0.485→0.394（真实查询有零词法交叠金标），默认回撤为 0——与 X5'唯一双世界复现参数结论'的强形式相抵")
+
+# ---------- 6. R2 / R2A 线 ----------
+edge("R2A-T2-1","SIM-E81","replicates","大审查/zcode/progress.md:18","no",
+     "T2-1：E81 复现（w_show 2.256 / 自报 P 0.79 / 真值 T −0.119），'自我美化无解'悬案关闭")
+edge("R2A-T1-1","SIM-E121","refutes","大审查/zcode/progress.md:19","no",
+     "E121 α 梯度两构造均未复现（Δ=0.005/0.002 皆塌缩）→按纪律收线")
+edge("R2A-T3-1","DS-P1","replicates","大审查/zcode/批次R2-A报告.md:16","no",
+     "clean 世界复现 deepseek 负代价（−0.0625，与 deepseek 探针 1 原始 0.7500−0.8125 同幅）")
+edge("R2A-T4-4","DS-R1-3","replicates","大审查/zcode/批次R2-A报告.md:17","no",
+     "legacy doctor 仅 1/4 检出（截断/并发丢更新/孤儿写+重算根全静默）——R1-3 密码学静默精确复现")
+edge("R2A-T4-4a","DS-R1-3","replicates","大审查/zcode/批次R2-A报告.md:85","no",
+     "A1 截断尾 2 行静默（前缀链自洽、集合根不变）——R1-3 精确复现")
+edge("R2A-T1-1c2","SIM-E123","replicates","大审查/zcode/批次R2-A报告.md:58","no",
+     "curate_truth 是唯一转正臂——E123'整理是数据空间的前提'的同构复现")
+edge("R2A-C6","SIM-E77","refutes","大审查/zcode/批次R2-A报告.md:79","yes",
+     "机械推断链：C6 判定'护栏免费/护栏有价'的无条件表述都不成立（代价符号=世界改进结构的函数）；SIM 侧无条件正收益表述出自 E77（第十七轮:44'安全性与性能不冲突'，PART2-JUDGE C6 列引混元 E77 +0.0331）")
+edge("R2-SUM-T3","SIM-E42","replicates","大审查/zcode/R2全批次总报告.md:18","no",
+     "C6 关闭；E42 复现；修正 85 部分升格")
+edge("R2-T1-2b","SIM-E122","replicates","大审查/zcode/R2全批次总报告.md:42","no",
+     "E122'judge 低效'在候选选择层的复现（α=0.3 的 judge 连挑候选都做不好）")
+edge("R2-T1-4","SIM-E123","refutes","大审查/zcode/R2全批次总报告.md:52","no",
+     "E123 锚点格（有审计无整理最差）未复现——本 harness 的审计=cfg 回退，在数据空间几乎无害")
+edge("R2-T2-2","SIM-E80","refutes","大审查/zcode/R2全批次总报告.md:63","no",
+     "三振（与 deepseek 探针 6、R1-2 并列）：E80 负交互在修正架构下结构性不可达，升格定理候选")
+edge("R2-T3-2a","SIM-E42","replicates","大审查/zcode/R2全批次总报告.md:71","no",
+     "valley 地形精确复现 E42 语义：strict 步进贪心被 dip 锁死（f=0.913，达峰 9/12）vs loose 跨谷")
+edge("R2-T3-2b","SIM-E41","refutes","大审查/zcode/R2全批次总报告.md:71","no",
+     "E41 原始'严格 +0.165 反而更好'未在本网格任何地形复现→C2 部分关闭")
+edge("R2-T4-5","SIM-E26","replicates","大审查/zcode/R2全批次总报告.md:91","no",
+     "触发式刷新 T=0.4062 最优——E26/E69 方向复现：重锚有效")
+edge("R2-T4-5","SIM-E69","replicates","大审查/zcode/R2全批次总报告.md:91","no",
+     "触发式刷新 T=0.4062 最优——E26/E69 方向复现：重锚有效")
+edge("R2-M5","SIM-E80","refutes","大审查/zcode/R2全批次总报告.md:109","no",
+     "E80 级负交互在修正架构下结构性不可达（三振；同源门天然不放大）——定理候选")
+edge("R2-ANCH-1","SIM-E121","refutes","大审查/zcode/R2全批次总报告.md:123","no",
+     "E121 α 梯度 −0.067→−0.004 未复现（两次）→收线，梯度噪声稳健性存疑")
+edge("R2A-T1-1","PLAN-T1-1","motivated_by","大审查/zcode/第二批推演沙盒实验树_规划.md:97","yes",
+     "机械推断链：R2-A 批次按《第二批推演沙盒实验树_规划》执行——T1-1 通道冻结/弥散性伤害判据预注册于规划（PLAN-T1-1），R2A-T1-1 为其实测")
+edge("R2A-T2-1","PLAN-T2-1","motivated_by","大审查/zcode/第二批推演沙盒实验树_规划.md:133","yes",
+     "机械推断链：T2-1 通道切除判据①②（含预注册反面判据）预注册于规划树（PLAN-T2-1），R2A-T2-1 执行")
+edge("R2A-T3-1","PLAN-T3-1","motivated_by","大审查/zcode/第二批推演沙盒实验树_规划.md:154","yes",
+     "机械推断链：T3-1 护栏代价符号判据（同号→C6 消解/反号→逐参数交换 ablation）预注册于规划树（PLAN-T3-1），R2A-T3-1 执行")
+
+# ---------- 7. VERIF 线 ----------
+edge("VERIF-S5-01","SIM-E7","replicates","猴子记忆库推演/reports/05-阶段5-统计复核.md:6","no",
+     "E7 两级门控——✅ 证实（完美分离精确复现）")
+edge("VERIF-S5-02","SIM-E7","replicates","猴子记忆库推演/reports/05-阶段5-统计复核.md:13","no",
+     "'完美分离，无一例外'在 24 种子下复现（地形自检 f(0.5)/f(0.9)/谷底全对）")
+edge("VERIF-A4","SIM-REPORT","replicates","knowledge/trajectories/2026-09-09/task-022-bootstrap对抗验证.md:16","yes",
+     "机械推断链：barrier 20/20 轮精确复现报告 5/60=92%（natural 61%）——对抗验证对象为 17 轮后总报告（解析为 SIM-REPORT）")
+edge("VERIF-B4","SIM-REPORT","replicates","猴子记忆库推演/reports/00-验证总报告.md:35","yes",
+     "机械推断链：12 进程丢更新 92%（accum=5≠60）barrier 20/20 复现——报告 P0-4 动态复现（17 轮后口径 SIM-REPORT）")
+edge("VERIF-E1","SIM-REPORT","replicates","猴子记忆库推演/reports/00-验证总报告.md:63","no",
+     "repro_a1① 构造性复现报告架构层发现：公理 D 不成立——审计链不含 payload，四条平行真相")
+edge("VERIF-X5","SIM-REPORT","refutes","猴子记忆库推演/reports/00-验证总报告.md:92","no",
+     "自我推翻计数口径不统一（报告头 15/摘要 14/表题 7）——报告内部账目一致性被证伪")
+edge("VERIF-FINAL","SIM-REPORT","replicates","猴子记忆库推演/reports/00-验证总报告.md:124","no",
+     "可数结论零误差，机制性结论全部动态复现，动态数字（92%、60、五态全一致、doctor 首行）精确到逐字")
+
+# ---------- 8. PART2 线 ----------
+for k in range(2, 13):
+    a = first_anchor(f"PART2-RND-{k}")
+    edge(f"PART2-RND-{k}", f"PART2-RND-{k-1}", "motivated_by", a, "yes",
+         f"机械推断链：PART2 假设循环按轮次编号顺序执行（round-{k} 报告承接 round-{k-1}；data-archive/meta_log round 列单调），R{k} motivated_by R{k-1}")
+for k in range(1, 13):
+    a = first_anchor(f"PART2-PREREG-{k}")
+    edge(f"PART2-RND-{k}", f"PART2-PREREG-{k}", "motivated_by", a, "yes",
+         f"机械推断链：round-{k} 报告按 round-{k} 预注册执行（先锁后跑纪律，meta_log），RND-{k} motivated_by PREREG-{k}")
+edge("PART2-RND-2","SIM-E41","replicates","大审查/reports/round-2-报告.md:14","no",
+     "margin=0.30 确实饿死采纳（125 事件 vs 968）且终值最低——E41'margin 太大饿死采纳'方向复现")
+edge("PART2-RND-3","SIM-E18","replicates","大审查/reports/round-3-报告.md:16","no",
+     "E18 引申部分成立：'跨库/多目标有代价'的方向在最小引擎中出现（−0.0656，幅度落入不确定带）")
+edge("PART2-RND-5","SIM-E12","replicates","大审查/reports/round-5-报告.md:14","no",
+     "87.5% 的 ≥8 点 run 末 5 代趋平——E12 平台期三态的'平台普遍性'一侧在统一档案中量化坐实")
+edge("PART2-PREREG-3","SIM-E16","replicates","大审查/reports/round-3-预注册.md:4","yes",
+     "机械推断链：round-3 预注册声明'H-R3-1 复现 E16（灾难性遗忘，单一档案）'，data-archive 记 SUPPORTED → 复现成立")
+edge("PART2-PREREG-3","SIM-E11","replicates","大审查/reports/round-3-预注册.md:4","yes",
+     "机械推断链：round-3 预注册声明'H-R3-2 复现 E11（Pareto 档案恢复力）'，data-archive 记 SUPPORTED")
+edge("PART2-FINAL","SIM-E16","replicates","大审查/reports/98-反思与报告.md:20","no",
+     "E16 灾难性遗忘强复现（retention −0.3782）；Pareto 档案缓解 +0.343（配对 61%）")
+edge("PART2-FINAL","SIM-E7","replicates","大审查/reports/98-反思与报告.md:53","no",
+     "E16 遗忘、E13/E7 两阶段门控复现（R3/R8 锁定输出，效应量 0.38/0.22 级）")
+edge("PART2-FINAL","SIM-E13","replicates","大审查/reports/98-反思与报告.md:53","no",
+     "E16 遗忘、E13/E7 两阶段门控复现（R3/R8 锁定输出，效应量 0.38/0.22 级）")
+edge("PART2-H-R8-2","PART2-H-R8-1","extends","大审查/data-archive.csv:19","yes",
+     "机械推断链：同轮假设 H-R8-2（两阶段）以 H-R8-1（单阶段）为对照并扩展——终值 0.7984 非劣且优于单阶段")
+edge("PART2-H-R4-1","PART2-LAB","refutes","大审查/reports/round-4-预注册.md:20","yes",
+     "机械推断链：吸收论被证伪（景观尖锐度是假采纳代价的调节变量）——'吸收普遍论'直觉出自 lab-notebook（PART2-LAB:29'最自信的直觉'）")
+edge("PART2-ANALYSIS","SIM-E14","contradicts","大审查/reports/06-ANALYSIS-FINAL.md:31","no",
+     "混元 E14 第四轮侧数据与第五轮重跑值构成 DUP_CONFLICT 且混元自述修正——建议整体降权")
+edge("PART2-JUDGE","SIM-E14","contradicts","大审查/reports/05-研判.md:46","no",
+     "C1：混元 E14 两轮数据不一致（DUP_CONFLICT×6，03-flags §2）")
+edge("PART2-FLAGS","SIM-E14","contradicts","大审查/reports/03-flags.md:35","no",
+     "E14 第四轮 vs 第五轮起点列不同（0.7844 vs 0.2594）——两轮世界/起点非同一设置，冲突值未裁决如实并陈")
+
+# ---------- 9. CB 线 ----------
+edge("CB-MEMEVOLVE","SIM-SUM14","replicates","大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验设计.md:169","yes",
+     "机械推断链：复现报告 P0-2（铁律 2 空串绕过拦截失败）——codebuddy 依据混元 14 轮后版总报告（1-版本谱系§三），解析为 SIM-SUM14")
+edge("CB-MEMEVOLVE","SIM-E7","refutes","大审查/codebuddy/mem-evolve-sandbox_交接/docs/任务报告.md:277","no",
+     "E7 直接复现失败：地形塑形项是基因组级的，必须摊到逐任务分，否则留出集配对比较看不见它（E7 欺骗地形缩水）")
+edge("CB-MEMEVOLVE","SIM-E52","refutes","大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验报告.md:300","no",
+     "E52 未复现（报告称 70% 独立噪声几乎无损；本沙盒噪声=金标替换为随机条目）")
+edge("CB-MEMEVOLVE","SIM-E64","refutes","大审查/codebuddy/mem-evolve-sandbox_交接/docs/任务报告.md:315","no",
+     "E64'预算 <150 时终局恒为负'未复现——本沙盒预算模型只限制代数，缺演化固定成本项，结构上不可能为负")
+edge("CB-MEMEVOLVE","SIM-E26","replicates","大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验设计.md:358","no",
+     "冻结后自报−真实缺口仍残留——与报告 E26/E27 一致：真正解决问题的是重锚，不是冻结/回滚")
+edge("CB-MEMEVOLVE","SIM-E27","replicates","大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验设计.md:358","no",
+     "冻结后自报−真实缺口仍残留——与报告 E26/E27 一致：真正解决问题的是重锚，不是冻结/回滚")
+
+# ---------- 10. GLM / QWEN / REVIEW / SYN ----------
+edge("GLM-WO-v3.10","GLM-WO-v3.8","supersedes","大审查/glm/v3.10.md:44","yes",
+     "工单版本链机械推断：glm v3.8 修复工单 → v3.10 架构优化工单（版本号最高者优先，目录文件名序）")
+edge("GLM-WEB-v4.0","GLM-WO-v3.10","refutes","大审查/glm/v4.0-1.md:34","no",
+     "v4 工单 D-1 的裁决需要推翻——当时理由在'改造成本最小化'前提下成立，该前提已变")
+edge("REVIEW-GLM","GLM-WO-v3.10","refutes","大审查/复审/GLM-裁决.md:41","no",
+     "复审认定：推翻自家 v3.10 D-1 的理由（前提变了）符合 ADR 制度精神")
+edge("REVIEW-Qwen","GLM-WO-v3.10","refutes","大审查/复审/Qwen-裁决.md:27","no",
+     "三方收敛于'做实'；GLM D-1 是早期裁决且其 v4.0-1 已自我推翻")
+edge("REVIEW-GLM","GLM-WEB-v4.0","contradicts","大审查/复审/GLM-裁决.md:34","no",
+     "zipapp bundle 替代单 .py 与'单文件+纯标准库'公理冲突——方向性变更，列 v5 另议")
+edge("REVIEW-GLM","SIM","replicates","大审查/复审/GLM-裁决.md:58","no",
+     "GLM 纸面设计（hypothesis 可证伪/隐判据人侧/E0 优先）≈ 混元沙盒验证（双门/判据人侧/E0 优先）——两个模型独立趋同")
+edge("QWEN-v3.10-AR","QWEN-v3.8","motivated_by","大审查/qwen/工单 v3.8.extract.txt:198","no",
+     "v3.8 工单建议：'全树重算 O(n)'为已知扩展性项，建议 v3.10 单独立项做增量哈希树")
+edge("SYN-报告一","QWEN-v3.8","replicates","大审查/统合报告/报告一_v3.8改进建议综合报告.md:26","yes",
+     "机械推断链：统合报告核验 MIGRATED 渲染 KeyError（GLM Q-005）——Q-005 为 qwen 工单 v3.8 条目，核验=复现其发现")
+edge("KB-TASK-022","SYN-报告一","supersedes","knowledge/trajectories/2026-09-07/task-022-v38执行.md:35","no",
+     "用户判定'审的一坨'，统合报告目录与核验脚本整体删除（用户指令）——原'落盘'状态作废")
+edge("KB-TASK-022","REVIEW-GLM","supersedes","knowledge/trajectories/2026-09-07/task-022-v38执行.md:43","no",
+     "混元 BUG-001 对 render_quickref 的批评比 GLM 深——修正对 GLM 的部分判决")
+edge("REVIEW-混元","SIM-REPORT","contradicts","大审查/复审/混元-裁决.md:44","yes",
+     "机械推断链：17 轮报告复现段所列 evolve2.py/evolve4.py/run_e9.py 等脚本缺失——可复现性主张与交接材料不符（对象为 17 轮后总报告）")
+edge("DB-V4-WO","DB-V4-EXPLORE","motivated_by","大审查/豆包/v4.0library-bootstrap v4 完全重构工单.md:14","yes",
+     "机械推断链：v4 完全重构工单以《架构可能性深度探索》为前置（探索报告评估事件溯源/CQRS/六边形→工单立项）")
+
+# ---------- 11. META / KB ----------
+edge("META-HANDOVER","SIM-E14","replicates","HANDOVER.md:97","no",
+     "锚定审计是唯一不可替代护栏（E14 真引擎复现）")
+edge("META-HANDOVER","SIM-E7","refutes","HANDOVER.md:94","no",
+     "E7 欺骗地形真引擎仅浅谷")
+edge("META-HANDOVER","SIM-E32","refutes","HANDOVER.md:94","no",
+     "E32 实测重要度冷启动失败")
+edge("META-HANDOVER","SIM-E57","refutes","HANDOVER.md:94","no",
+     "E57 相关噪声击穿未复现")
+edge("META-HANDOVER","SIM-E80","refutes","HANDOVER.md:94","no",
+     "E80 复合负交互未复现")
+edge("KB-TASK-020","SIM-HANDOVER","motivated_by","knowledge/trajectories/2026-09-08/task-020-自演化沙盒.md:79","no",
+     "HANDOVER 指名交本会话：交付 26 轮推演交接包（125 实验/kernel.py v1/HANDOVER/verify 脚本）")
+
+# ---------- 校验 ----------
+errors = []
+seen = set()
+for (f, t, rel, anchor, inf, reason) in E:
+    if rel not in RELATIONS: errors.append(f"relation 非法: {rel}")
+    if anchor not in ledger: errors.append(f"anchor 不在账本: {anchor} ({f}->{t})")
+    for n in (f, t):
+        if n not in nodes and n not in HUBS: errors.append(f"节点不存在: {n} ({f}->{t})")
+    if inf not in ("yes", "no"): errors.append(f"INFERRED 非法: {inf}")
+    if f == t: errors.append(f"自连边: {f}")
+    key = (f, t, rel, anchor)
+    if key in seen: errors.append(f"重复边: {key}")
+    seen.add(key)
+if errors:
+    print("校验失败："); [print(" -", e) for e in errors]; sys.exit(1)
+
+# 时间线纪律自检（粗粒度序：宇宙序 + SIM 宇宙内实验号序）
+URANK = {"SIM":0,"DB":1,"CB":1.5,"REAL":2,"DS":3,"VERIF":3.5,"PART2":3.5,"REVIEW":4,"SYN":4,
+         "GLM":3.5,"QWEN":3.5,"R2":4.5,"R2A":4.6,"PLAN":4.4,"KB":5,"META":5,"DEPLOY":5,
+         "PART1":5,"L8LAB":5,"RADAR":5}
+def uof(n): return n.split("-")[0] if n not in HUBS else n
+def simnum(n):
+    if n not in node_universe or node_universe[n] != "SIM": return None
+    m = re.search(r"E(\d+)", n)
+    if not m: return 9000  # SIM-SUM/SUM14/R 轮次报告等非实验号节点按大数处理
+    v = int(m.group(1))
+    suffix = n.split("E" + m.group(1))[-1]
+    if suffix: v += 0.5          # E14C/E29b/E81c 等修正变体视为略后
+    if n.startswith("SIM-WEB-"): v += 0.6
+    return v
+anomalies = []
+# 白名单：宇宙粗秩误报（时序已在 inferred_reason 中论证）
+WHITELIST = {("REAL","DS","replicates")}  # 验收报告晚于被验收的 DS 交接基线
+for (f, t, rel, anchor, inf, reason) in E:
+    if rel not in TIME_SAFE: continue
+    if (f, t, rel) in WHITELIST: continue
+    uf, ut = uof(f), uof(t)
+    if uf == ut == "SIM":
+        nf, nt = simnum(f), simnum(t)
+        if nf is not None and nt is not None and nf < nt:
+            anomalies.append((f, t, rel, anchor))
+        continue
+    rf, rt = URANK.get(uf, 9), URANK.get(ut, 9)
+    if rf < rt: anomalies.append((f, t, rel, anchor))
+
+# ---------- 输出 ----------
+out = f"{BASE}/tree_edges.csv"
+with open(out, "w", encoding="utf-8", newline="") as fo:
+    w = csv.writer(fo)
+    w.writerow(["from_id","to_id","relation","anchor","evidence_quote","INFERRED","inferred_reason"])
+    for (f, t, rel, anchor, inf, reason) in E:
+        q = ledger[anchor]["verbatim_quote"].replace("\n", " ")[:60]
+        w.writerow([f, t, rel, anchor, q, inf, reason])
+
+print(f"输出 {out}")
+print(f"总边数: {len(E)}")
+print("按 relation 计数:", dict(Counter(e[2] for e in E)))
+ninf = sum(1 for e in E if e[4] == "yes")
+print(f"INFERRED=yes: {ninf} ({ninf*100.0/len(E):.1f}%)")
+print(f"TIME-ANOMALY 可疑: {len(anomalies)}")
+for a in anomalies: print("  !", a)
+print("按 from 宇宙分布:", dict(Counter(uof(e[0]) for e in E)))

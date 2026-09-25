@@ -1,0 +1,47 @@
+# L2 服务件 kind 注册（server 级 · SPEC §B-2 在服务形态的落地位）
+
+> 依据：SPEC §B-2（kind 注册=宿主三件事之一）。L2 形态下"宿主"=服务件（运营域级）——
+> 本表覆盖八工具产生的全部 kind；`capability_issue` 由 audit-kit 签发路径写入。
+> 开放集：库运营者可扩展（多声明不罚）；actor 规约=`llm:<platform>:<grant_id>`（L2 设计 §三②）。
+version: 1
+kinds:
+  entry_append:
+    description: "条目写入留痕（含 content_hash 幂等键）"
+    actor_pattern: "llm:*|human:*|import:pipeline"
+    authority_level: 1
+  retrieve_hit:
+    description: "检索命中留痕（last_used 刷新的账面依据）"
+    actor_pattern: "llm:*|human:*"
+    authority_level: 1
+  promotion:
+    description: "条目 intermediate → longterm 晋升事件"
+    actor_pattern: "llm:*|human:*|fallback:rule"
+    authority_level: 3
+  tombstone:
+    description: "墓碑：标记后退出检索但原位保留（审计窗口）"
+    actor_pattern: "llm:*|human:*"
+    authority_level: 2
+  anchor:
+    description: "链头入库外锚物（state/<lib>.anchor.txt）"
+    actor_pattern: "llm:*|human:*"
+    authority_level: 2
+  anchor_scan:
+    description: "出站引用三态扫描（roots 圈定内）"
+    actor_pattern: "llm:*|human:*"
+    authority_level: 2
+  memory_adjudicate:
+    description: "三 intent 判定留痕（结构强制）"
+    actor_pattern: "llm:*|fallback:rule"
+    authority_level: 3
+  capability_issue:
+    description: "能力令牌签发（权限的历史也在账上）"
+    actor_pattern: "human:*"
+    authority_level: 4
+  human_override:
+    description: "人工推翻机器判定（S8-4 人侧仲裁通道；ops 面，**不进协议八工具**）"
+    actor_pattern: "human:*"
+    authority_level: 4
+  capability_revoke:
+    description: "能力撤销（S8-3）：grant_id 收回；与 capability_issue 成对留在账上，撤销不删历史"
+    actor_pattern: "human:*"
+    authority_level: 4

@@ -1,0 +1,51 @@
+# -*- coding: utf-8 -*-
+"""verify_move_full.txt — 衔尾蛇副本并入全量对账（非抽查）
+对照基线 files.jsonl 中 衔尾蛇副本/ 前缀全部记录，逐一 sha256 核对目的地现文件。
+任何一项不一致（缺失/哈希异）即列出。退出码 0=完全一致。"""
+import json, hashlib, os, sys
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+DEST = os.path.join(ROOT, "大审查", "衔尾蛇", "attic", "衔尾蛇副本-冻结快照-20260909")
+
+old = {}
+with open(os.path.join(ROOT, "workspace-audit", "data", "files.jsonl"), encoding="utf-8", errors="surrogatepass") as f:
+    for line in f:
+        r = json.loads(line)
+        if r["path"].startswith("衔尾蛇副本/"):
+            old[r["path"][len("衔尾蛇副本/"):]] = (r["sha256"], r["size"])
+print("基线记录数:", len(old))
+
+checked = missing = mismatched = io_err = 0
+bad_list = []
+for rel, (want_hash, want_size) in old.items():
+    fp = os.path.join(DEST, *rel.split("/"))
+    if not os.path.exists(fp):
+        missing += 1
+        bad_list.append(("MISSING", rel))
+        continue
+    h = hashlib.sha256()
+    try:
+        with open(fp, "rb") as fh:
+            for b in iter(lambda: fh.read(1 << 20), b""):
+                h.update(b)
+        if h.hexdigest() == want_hash:
+            checked += 1
+        else:
+            mismatched += 1
+            bad_list.append(("HASH-DIFF", rel))
+    except OSError as e:
+        io_err += 1
+        bad_list.append(("IO-ERR", f"{rel}: {e}"))
+
+# 反向：目的地是否多出基线没有的文件
+dest_files = set()
+for dirpath, dirnames, filenames in os.walk(DEST):
+    for fn in filenames:
+        dest_files.add(os.path.relpath(os.path.join(dirpath, fn), DEST).replace("\\", "/"))
+extra = dest_files - set(old.keys())
+
+print(f"全量对账：一致 {checked} / 缺失 {missing} / 哈希不符 {mismatched} / IO错误 {io_err}")
+print(f"反向检查：目的地比基线多 {len(extra)} 个文件")
+for kind, rel in bad_list[:20]:
+    print("  ", kind, rel[:90])
+sys.exit(0 if (missing == 0 and mismatched == 0 and io_err == 0 and len(extra) == 0) else 1)

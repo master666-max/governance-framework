@@ -1,0 +1,74 @@
+# -*- coding: utf-8 -*-
+"""ledger_verify.txt — claim_ledger 逐字性验证器
+读 claim_ledger.csv，逐条打开 source_file，检查 location_anchor 指向的行
+是否逐字包含 verbatim_quote。输出命中/未命中统计 + 未命中明细。
+供阶段收尾抽检与试金石使用。用法：py -X utf8 tools/ledger_verify.txt [N]
+N=只校验最近 N 条（缺省全部）。"""
+import os, csv, sys, collections
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+LEDGER = os.path.join(ROOT, "workspace-audit", "claim_ledger.csv")
+
+limit = int(sys.argv[1]) if len(sys.argv) > 1 else None
+with open(LEDGER, encoding="utf-8", newline="") as f:
+    rows = list(csv.DictReader(f))
+if limit:
+    rows = rows[-limit:]
+
+# 被 supersede 的行不计入命中率分母（已知错误、已留痕于 supersede_log）
+sup_path = os.path.join(os.path.dirname(LEDGER), "supersede_log.csv")
+sup = set()
+if os.path.exists(sup_path):
+    with open(sup_path, encoding="utf-8", newline="") as f:
+        sup = {r["old_claim_id"] for r in csv.DictReader(f)}
+sup_rows = [r for r in rows if r["claim_id"] in sup]
+rows = [r for r in rows if r["claim_id"] not in sup]
+
+# 路径迁移映射（2026-09-09 用户指令移动 衔尾蛇副本/ → 大审查/衔尾蛇/attic/…；
+# 账本行的 source_file 保持入账时原样（R7），验证时经此表解析现路径）
+PATH_MAP = {
+    "衔尾蛇副本/": os.path.join("大审查", "衔尾蛇", "attic", "衔尾蛇副本-冻结快照-20260909") + "/",
+}
+
+cache = {}
+hit = miss = 0
+misses = []
+for r in rows:
+    src = r["source_file"]
+    anchor = r["location_anchor"]
+    quote = r["verbatim_quote"]
+    try:
+        line_no = int(anchor.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        miss += 1
+        misses.append((r["claim_id"], "锚点格式坏", anchor))
+        continue
+    if src not in cache:
+        resolved = src
+        for oldp, newp in PATH_MAP.items():
+            if src.startswith(oldp):
+                resolved = newp + src[len(oldp):]
+                break
+        fp = os.path.join(ROOT, *resolved.split("/"))
+        try:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                cache[src] = f.readlines()
+        except OSError:
+            cache[src] = None
+    lines = cache[src]
+    if lines is None:
+        miss += 1
+        misses.append((r["claim_id"], "文件打不开", src))
+        continue
+    if 1 <= line_no <= len(lines) and quote in lines[line_no - 1]:
+        hit += 1
+    else:
+        miss += 1
+        actual = lines[line_no - 1][:80] if 1 <= line_no <= len(lines) else "<行号越界>"
+        misses.append((r["claim_id"], f"第{line_no}行不含摘录", actual))
+
+total = hit + miss
+print(f"校验 {total} 条（另有 {len(sup_rows)} 条已supersede不计）：命中 {hit}，未命中 {miss}，命中率 {hit/total*100 if total else 100:.0f}%")
+for cid, reason, detail in misses:
+    print(f"MISS {cid[:16]}  {reason}  {detail!r}")
+sys.exit(1 if total == 0 else (0 if hit / total >= 0.8 else 1))  # 20260919 VKPS评估卷弱项⑭: 空输入=探针已死改判exit1(静默失败检查单"恒1.0=探针已死"同族)

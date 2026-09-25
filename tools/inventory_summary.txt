@@ -1,0 +1,149 @@
+# -*- coding: utf-8 -*-
+"""inventory_summary.txt — 阶段0 汇总脚本
+读 data/files.jsonl，生成 00-盘点.md：总数/类型分布/体积分布/精确重复表/
+乱码文件名清单。全部计数由本脚本机械产生，无手写数字。"""
+import json, os, collections
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+files = []
+with open(os.path.join(AUD, "data", "files.jsonl"), encoding="utf-8", errors="surrogatepass") as f:
+    for line in f:
+        files.append(json.loads(line))
+
+n = len(files)
+total_bytes = sum(r["size"] for r in files)
+
+# ---- 类型分布（按扩展名；无扩展名单列 <none>）----
+by_ext = collections.Counter()
+size_by_ext = collections.Counter()
+for r in files:
+    e = r["ext"] if r["ext"] else "<none>"
+    by_ext[e] += 1
+    size_by_ext[e] += r["size"]
+
+# ---- 体积分布（分桶，按文件数与字节数）----
+buckets = [(0, 1024), (1024, 10*1024), (10*1024, 100*1024), (100*1024, 1024*1024),
+           (1024*1024, 10*1024*1024), (10*1024*1024, 100*1024*1024), (100*1024*1024, float("inf"))]
+def bucket_label(lo, hi):
+    def h(v):
+        if v >= 1024*1024: return f"{v/1024/1024:.0f}MiB"
+        if v >= 1024: return f"{v/1024:.0f}KiB"
+        return f"{v}B"
+    return f"{h(lo)}–{h(hi)}" if hi != float("inf") else f">{h(lo)}"
+bucket_cnt = collections.Counter()
+bucket_bytes = collections.Counter()
+for r in files:
+    for lo, hi in buckets:
+        if lo <= r["size"] < hi:
+            bucket_cnt[bucket_label(lo, hi)] += 1
+            bucket_bytes[bucket_label(lo, hi)] += r["size"]
+            break
+
+# ---- 顶层目录分布 ----
+by_top = collections.Counter()
+size_by_top = collections.Counter()
+for r in files:
+    top = r["path"].split("/")[0]
+    if "/" not in r["path"]:
+        top = "(根目录散文件)"
+    by_top[top] += 1
+    size_by_top[top] += r["size"]
+
+# ---- 精确重复表（sha256 相同且 size>0；size=0 的空文件单独计数）----
+by_hash = collections.defaultdict(list)
+empty_cnt = 0
+for r in files:
+    if r["size"] == 0:
+        empty_cnt += 1
+        continue
+    by_hash[r["sha256"]].append(r)
+dup_groups = {h: rs for h, rs in by_hash.items() if len(rs) > 1}
+dup_wasted = sum(sum(x["size"] for x in rs) - rs[0]["size"] for rs in dup_groups.values())
+dup_files = sum(len(rs) for rs in dup_groups.values())
+
+# ---- surrogate（乱码）文件名 ----
+mojibake = [r for r in files if any(0xD800 <= ord(c) <= 0xDFFF for c in r["path"])]
+
+# ---- 输出 ----
+out = []
+out.append("# 00-盘点.md — 阶段0 全量机械盘点")
+out.append("")
+out.append("> 生成命令：`py -X utf8 workspace-audit/tools/inventory_walk.txt` + `py -X utf8 workspace-audit/tools/inventory_summary.txt`")
+out.append("> 原始数据：`workspace-audit/data/files.jsonl`（89768 行逐文件记录，含 path/size/mtime/sha256/ext）")
+out.append("> 扫描时间：2026-09-09；耗时 64 秒；读取错误 0。原工作区只读，本盘点未修改任何原文件。")
+out.append("")
+out.append(f"## 总量")
+out.append("")
+out.append(f"- 文件总数：**{n}**")
+out.append(f"- 总体积：**{total_bytes:,} 字节（{total_bytes/1024/1024:.1f} MiB）**")
+out.append(f"- 空文件（size=0，不参与重复检测）：{empty_cnt}")
+out.append(f"- 精确重复组：**{len(dup_groups)}** 组，涉及 {dup_files} 个文件，冗余字节 {dup_wasted/1024/1024:.1f} MiB")
+out.append(f"- 乱码文件名（含 surrogate，多为 EPUB 解包 cp437 类）：{len(mojibake)}")
+out.append("")
+out.append("## 类型分布（按扩展名，前 40 + 汇总）")
+out.append("")
+out.append("| 扩展名 | 文件数 | 字节数 | 占比(字节) |")
+out.append("|---|---:|---:|---:|")
+cum = 0
+for e, c in sorted(size_by_ext.items(), key=lambda kv: -kv[1]):
+    cum += size_by_ext[e]
+    out.append(f"| {e} | {c} | {size_by_ext[e]:,} | {size_by_ext[e]/total_bytes*100:.1f}% |")
+out.append(f"| **合计（{len(by_ext)} 类）** | **{n}** | **{total_bytes:,}** | 100% |")
+out.append("")
+out.append("## 体积分布（分桶）")
+out.append("")
+out.append("| 区间 | 文件数 | 字节数 |")
+out.append("|---|---:|---:|")
+for lo, hi in buckets:
+    lb = bucket_label(lo, hi)
+    out.append(f"| {lb} | {bucket_cnt.get(lb,0)} | {bucket_bytes.get(lb,0):,} |")
+out.append("")
+out.append("## 顶层目录分布")
+out.append("")
+out.append("| 顶层 | 文件数 | 字节数 |")
+out.append("|---|---:|---:|")
+for t, c in sorted(size_by_top.items(), key=lambda kv: -kv[1]):
+    out.append(f"| {t} | {c} | {size_by_top[t]:,} |")
+out.append("")
+out.append("## 精确重复表（sha256 全同组，按冗余字节降序）")
+out.append("")
+out.append(f"共 {len(dup_groups)} 组。完整表见 `00-重复表.csv`（每组一行：sha256/组内文件数/组内字节数/成员路径列表）。")
+out.append("本表列冗余量最大的前 30 组：")
+out.append("")
+out.append("| 组序 | 组内文件数 | 单文件大小 | 冗余字节 | 成员（前 5，全列见 csv） |")
+out.append("|---:|---:|---:|---:|---|")
+gsorted = sorted(dup_groups.values(), key=lambda rs: -(sum(x['size'] for x in rs) - rs[0]['size']))
+for i, rs in enumerate(gsorted[:30], 1):
+    members = "<br>".join(x["path"] for x in rs[:5]) + (f"<br>…共{len(rs)}个" if len(rs) > 5 else "")
+    out.append(f"| {i} | {len(rs)} | {rs[0]['size']:,} | {(len(rs)-1)*rs[0]['size']:,} | {members} |")
+out.append("")
+out.append("## 乱码文件名清单（考古注记）")
+out.append("")
+out.append("以下文件路径含 Unicode surrogate（磁盘上的坏字节文件名，P-002 类 EPUB 解包残留）。")
+out.append("sha256 已正常入库；git 无法索引其中 1 个（已从基线豁免，见 00-盘点 头部说明）。")
+out.append("")
+for r in mojibake:
+    out.append(f"- `{r['path'].encode('utf-8', 'surrogatepass').decode('utf-8', 'replace')}` ({r['size']:,} B, sha256={r['sha256'][:16]}…)")
+out.append("")
+out.append("## git 基线覆盖说明")
+out.append("")
+out.append("- 基线 commit：`77fb1a0af30244d8d9846a2eedcc0f9b0916d2f3`（根仓库，47730 文件）")
+out.append("- 嵌套 git 仓库 3 个（根仓库以 gitlink 固定其 HEAD）：大审查=`c31ad39…`（19 个未跟踪项）、大审查/zcode=`e91bdef…`（10 个未跟踪项）、猴子记忆库推演=`ad8b274…`（clean）。快照见 `data/nested-repos-baseline.txt`")
+out.append("- 嵌套仓库内部文件与 1 个坏文件名文件不入根仓库基线，其完整性由 files.jsonl 的 sha256 全量覆盖")
+out.append("")
+
+with open(os.path.join(AUD, "00-盘点.md"), "w", encoding="utf-8") as f:
+    f.write("\n".join(out))
+
+# 完整重复表 csv
+with open(os.path.join(AUD, "00-重复表.csv"), "w", encoding="utf-8", errors="surrogatepass") as f:
+    f.write("group_no,sha256,file_count,size_each,total_redundant_bytes,members\n")
+    for i, rs in enumerate(gsorted, 1):
+        members = "|".join(x["path"] for x in rs)
+        f.write(f'{i},{rs[0]["sha256"]},{len(rs)},{rs[0]["size"]},{(len(rs)-1)*rs[0]["size"]},"{members}"\n')
+
+print(f"00-盘点.md lines={len(out)}")
+print(f"00-重复表.csv groups={len(dup_groups)}")
+print(f"mojibake={len(mojibake)}")

@@ -1,0 +1,54 @@
+# -*- coding: utf-8 -*-
+"""spotcheck_p0.txt — 阶段0 锚点抽检（全抽，<10 条）
+核对 00-文献清单.md 中锚点断言的 verbatim 摘录是否逐字存在于锚点行。
+输出追加 audit-log.csv（首次运行写表头）。"""
+import os, csv, datetime
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+checks = [
+    ("引用论文总表.md", 190, "arXiv 论文 24 篇（A1–A23、A27）"),
+    ("引用论文总表.md", 3, "bootstrap_v3.8.2 SOURCES 区 REGISTRY"),
+    ("引用论文总表.md", 108, "SWE-bench 解决率 20%→50%"),
+    ("引用论文总表.md", 192, "三个不同实体"),
+    ("库调试工作区/citations.md", 1, "手改即违例"),
+    ("库调试工作区/citations.md", 15, "v2.x 标题与作者皆错"),
+    ("大审查/glm/v4.0-1.md", 3, "它引用的 33 篇文献"),
+    ("库调试工作区/references/两轴模型与演化授权-v1.md", 4, "混元 26 轮离线推演（125 实验）"),
+    ("库调试工作区/references/两轴模型与演化授权-v1.md", 11, "L 能力轴"),
+    ("库调试工作区/references/两轴模型与演化授权-v1.md", 14, "两轴正交"),
+]
+
+log_path = os.path.join(AUD, "audit-log.csv")
+new_file = not os.path.exists(log_path)
+results = []
+for rel, ln, frag in checks:
+    fp = os.path.join(ROOT, rel)
+    ok, reason = False, ""
+    try:
+        with open(fp, encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        if 1 <= ln <= len(lines):
+            ok = frag in lines[ln - 1]
+            reason = "" if ok else f"摘录不在第{ln}行（该行内容截断: {lines[ln-1][:60]!r}）"
+        else:
+            reason = f"行号越界：文件共{len(lines)}行"
+    except OSError as e:
+        reason = f"读取失败: {e}"
+    claim_id = f"P0:{rel}:{ln}:{frag[:20]}"
+    results.append((claim_id, "命中" if ok else "未命中", reason))
+
+with open(log_path, "a", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    if new_file:
+        w.writerow(["claim_id", "result", "reason", "checked_at", "phase"])
+    ts = datetime.datetime.now().isoformat(timespec="seconds")
+    for cid, res, reason in results:
+        w.writerow([cid, res, reason, ts, "0"])
+
+hit = sum(1 for r in results if r[1] == "命中")
+print(f"抽检 {len(results)} 条，命中 {hit}，命中率 {hit/len(results)*100:.0f}%")
+for cid, res, reason in results:
+    if res == "未命中":
+        print("MISS:", cid, reason)

@@ -1,0 +1,37 @@
+{
+  "aggregate_sha": "33cafbd862e4d9486a308d69f31124a940aa8be5914396f1434d3c0b6fb104c4",
+  "component": "evo",
+  "conformance": [
+    {
+      "exit": 0,
+      "passed": 3,
+      "target": "<out>/vendored/evo",
+      "total": 3,
+      "what": "smoke evo(3 钉值)"
+    }
+  ],
+  "files": {
+    "evocore/__init__.py": "fe71bcc6f45ea3d1038c879120122ac36c268edef4d299b6ba9cd3671c215d17",
+    "evocore/decision.py": "0ba4a11026c049a55bf1e14fdfa6c20075d72891a51828065d4c07fb329ed56e",
+    "evocore/entry.py": "cff5c4e2d17062ccecf538e46b421d787a35b33930fc8c33ecb894abe59e5200",
+    "evocore/lifecycle.py": "e13924cceff497e33143c9b37e77d6681f0077496c190d6b6cb791962c21e9b6",
+    "evocore/project.py": "b0e9609909bd660f93bc4318dd9fb8056d7755ac35365524a59c34afd58ce545",
+    "evocore/retrieval.py": "77870ebd816d1c44e3873fd853b4cc87aa27d6d15843e91b41e032dcc3d37072",
+    "evocore/tunables.py": "f66e7189698a5255162745dce88f466db315d395e5e4fa27c04b6458428a8579"
+  },
+  "form": "vendored",
+  "schema_version": 1,
+  "sources": {
+    "evocore/__init__.py": "evocore/__init__.py",
+    "evocore/decision.py": "evocore/decision.py",
+    "evocore/entry.py": "evocore/entry.py",
+    "evocore/lifecycle.py": "evocore/lifecycle.py",
+    "evocore/project.py": "evocore/project.py",
+    "evocore/retrieval.py": "evocore/retrieval.py",
+    "evocore/tunables.py": "evocore/tunables.py"
+  },
+  "spec": "SPEC-内核接口与宿主契约-v1+v1.1增补-20260924",
+  "versions": {
+    "evocore": "0.5.0"
+  }
+}

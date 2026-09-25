@@ -1,0 +1,77 @@
+#!/bin/sh
+# pre-commit — 审计区治理钩子（20260919 VKPS 评估卷 ROI 第三件：把 append-only 从 ⑤ 级纪律升到 ② 级强制力）
+# 版本库副本=tools/hooks/pre-commit；安装位=.git/hooks/pre-commit。
+# 改钩子=唯一被允许改既有文件的例外：改动须同步两处+commit message 声明+新 sha256 登记 LOG。
+# 检查1 账本 append-only：staged diff deleted>0 → 拒绝
+# 检查2 LOG 条目号撞号：新追加条目号若已存在于 HEAD → 拒绝（历史撞号不追溯）
+# 检查3 沙盒预注册SOP七副本一致性（SOP v1.1 条款⑤豁免清单同族的副本税防线）
+# 检查4 R2 预防闸门（20260919 用户采纳，补遗二 N-9 同源）：staged .py **与 .txt 形态的 Python**
+#       （W2-N7 扩面）的 R2 不可证伪
+#       候选数不得较 HEAD 增加（不是禁止修改，是禁止静默增加"恒真面"；已有候选的
+#       处置走 tools/invariant-findings-ledger.md 台账——20260923 起钩子读台账：已登记文件豁免（文件级），未登记仍拒）
+
+del=$(git diff --cached --numstat -- claim_ledger.csv | awk '{print $2}')
+if [ -n "$del" ] && [ "$del" != "0" ] && [ "$del" != "-" ]; then
+  echo "PRE-COMMIT REJECT: claim_ledger.csv staged deleted=$del (append-only violation)" >&2
+  exit 1
+fi
+
+if git diff --cached --name-only | grep -q '^INCREMENTAL-LOG.md$'; then
+  new_nums=$(diff <(git show HEAD:INCREMENTAL-LOG.md 2>/dev/null | grep -o '^## 条目 [0-9]*' | grep -o '[0-9]*' | sort -u) \
+                 <(git show :INCREMENTAL-LOG.md 2>/dev/null | grep -o '^## 条目 [0-9]*' | grep -o '[0-9]*' | sort -u) | grep '^>' | awk '{print $2}')
+  for n in $new_nums; do
+    if git show HEAD:INCREMENTAL-LOG.md 2>/dev/null | grep -q "^## 条目 $n "; then
+      echo "PRE-COMMIT REJECT: INCREMENTAL-LOG.md 条目 $n 与 HEAD 撞号" >&2
+      exit 1
+    fi
+  done
+fi
+
+base=""
+for f in imap2/sandbox/nest/*/预注册SOP-*.md; do
+  if [ -z "$base" ]; then base="$f"; h0=$(sha256sum "$f" | cut -d' ' -f1)
+  else h=$(sha256sum "$f" | cut -d' ' -f1)
+    if [ "$h" != "$h0" ]; then echo "PRE-COMMIT REJECT: 沙盒SOP副本不一致: $f" >&2; exit 1; fi
+  fi
+done
+
+# 检查4：R2 不可证伪面不得静默增加（对 staged 新增/修改且含 check( 的 .py 与 .txt 形态的 Python）
+# W2-N7（20260923 开工批）：原选择器只 grep '\.py$'——本仓有 **104 个 Python 脚本以 .txt 存在**
+# （tools 43 / red-team 60 / data 1，由 exec(compile(...)) 载入），闸门对这一类**结构性失明**：
+# 往 .txt 里加恒真判据不会被拦。探测判据=首行为 Python 编码声明（实测这批件 104/104 命中；
+# 纯文本台账如 tools/smell-baseline.txt 首行为 `# smell-baseline.txt —`，不误纳）。
+# 判据本身可复算：见 开工-20260923/01-改动台账.md W2-N7 行。
+SCAN="tools/invariant_scanner.py"
+[ -f "$SCAN" ] || SCAN="$(git rev-parse --show-toplevel)/tools/invariant_scanner.py"
+# W2-N7b（同批·更深一层）：路径读取必须加 `-c core.quotepath=false` 且用 NUL 分隔。
+# 原写法 `for f in $(git diff --cached --name-only …)`：git 对**非 ASCII 路径**默认转义成
+# "\345\274\200\345\267\245…" 带引号的字面量 ⇒ 该文件从未被扫描（**静默跳过**，中文目录下
+# 的 .py 一律漏检）；含空格路径同理会被词分裂。实测对照见 开工-20260923/01-改动台账.md。
+# 循环体用进程替换（非管道）以保 `exit 1` 能真的终止钩子——本钩子已用 `<(...)`，即已依赖 bash。
+while IFS= read -r -d '' f; do
+  case "$f" in
+    *.py) ;;
+    *.txt) head -n 1 "$f" 2>/dev/null | grep -q '^# -\*- coding' || continue ;;
+    *) continue ;;
+  esac
+  grep -q 'check(' "$f" 2>/dev/null || continue
+  new_n=$(py -X utf8 "$SCAN" --r2-only "$f" 2>/dev/null | grep -o 'R2_CANDIDATES=[0-9]*' | cut -d= -f2)
+  [ -z "$new_n" ] && new_n=0
+  old_n=0
+  if git cat-file -e "HEAD:$f" 2>/dev/null; then
+    old_n=$(git show "HEAD:$f" > /tmp/precommit_r2_old.py 2>/dev/null && py -X utf8 "$SCAN" --r2-only /tmp/precommit_r2_old.py 2>/dev/null | grep -o 'R2_CANDIDATES=[0-9]*' | cut -d= -f2)
+    [ -z "$old_n" ] && old_n=0
+    rm -f /tmp/precommit_r2_old.py
+  fi
+  if [ "$new_n" -gt "$old_n" ] 2>/dev/null; then
+    # 台账豁免（20260923：使实现与提示一致——登记过的文件交台账管，文件级豁免，v2 可改行号级）
+    if grep -q "$f" tools/invariant-findings-ledger.md 2>/dev/null; then
+      echo "R2 候选增量已在 invariant-findings-ledger.md 登记豁免（$f：$old_n -> $new_n）——放行，复评走台账" >&2
+    else
+      echo "PRE-COMMIT REJECT: $f 的 R2 不可证伪候选数增加（$old_n -> $new_n）——修改判据为可失败形态，或在 tools/invariant-findings-ledger.md 登记存量处置" >&2
+      exit 1
+    fi
+  fi
+done < <(git -c core.quotepath=false diff --cached --name-only --diff-filter=AM -z)
+
+exit 0

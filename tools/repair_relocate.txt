@@ -1,0 +1,55 @@
+# -*- coding: utf-8 -*-
+"""repair_relocate.txt — ingest 失败条目的行号重定位修复
+对 ingest-errors-*.jsonl：在 ±8 行窗口内逐行搜索 start_anchor 逐字匹配，
+命中即以真实行号入账（程序化截取）；多命中取最近；零命中报告。"""
+import os, sys, json
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ROOT = os.path.dirname(AUD)
+ns = {}
+exec(compile(open(os.path.join(AUD, "tools", "ledger_tool.txt"), encoding="utf-8").read(), "lt", "exec"), ns)
+ledger_add_extract = ns["ledger_add_extract"]
+
+err_files = sys.argv[1:]
+cache = {}
+fixed = unfixed = 0
+still = []
+for ef in err_files:
+    with open(os.path.join(AUD, ef), encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            src = r["file"]
+            if src not in cache:
+                with open(os.path.join(ROOT, src), encoding="utf-8", errors="replace") as f:
+                    cache[src] = f.readlines()
+            lines = cache[src]
+            target = None
+            for off in range(0, 9):
+                for cand in (r["line"] - off, r["line"] + off):
+                    if 1 <= cand <= len(lines) and r["start_anchor"] in lines[cand - 1]:
+                        target = cand
+                        break
+                if target:
+                    break
+            if target:
+                try:
+                    cid, res = ledger_add_extract(src, target, r["start_anchor"], r["end_anchor"],
+                                                  r["claim_type"], r["experiment_id"],
+                                                  r.get("source_type", "document"), r["status"])
+                    fixed += 1 if res == "added" else 0
+                except ValueError as e:
+                    unfixed += 1
+                    still.append({**r, "error": f"relocated@{target}: {e}"})
+            else:
+                unfixed += 1
+                still.append({**r, "error": "±8行窗口内未找到 start_anchor"})
+print(f"修复入账 {fixed}，仍失败 {unfixed}")
+for s in still[:10]:
+    print(f"  STILL {s['file']}:{s['line']} {s['error'][:70]}")
+if still:
+    with open(os.path.join(AUD, "data", "ingest-errors-unresolved.jsonl"), "a", encoding="utf-8") as f:
+        for s in still:
+            f.write(json.dumps(s, ensure_ascii=False) + "\n")

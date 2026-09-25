@@ -1,0 +1,106 @@
+# -*- coding: utf-8 -*-
+"""phase8_matrix.txt — 阶段8 LM 矩阵构建（规则=tools/phase8-guide.md v1 冻结版）"""
+import csv, io, sys, collections
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+mechs = read_csv(AUD + r"\mechanism-registry.csv")
+grades = read_csv(AUD + r"\data\phase7-grades.csv")
+own = {r["obj"].replace("MECH:", ""): r["layer"] for r in grades if r["obj"].startswith("MECH:")}
+assert len(own) == 45
+
+VERIFIED = {"MECH-01","MECH-02","MECH-03","MECH-08","MECH-12","MECH-14","MECH-15","MECH-16",
+            "MECH-18","MECH-22","MECH-25","MECH-26","MECH-45"}
+PLANNED = {"MECH-28"}
+EXC = {
+    ("L4","MECH-03"): ("已实现且已验","锚定审计检出L4漂移8/8（E14），同源失效边界已知（E81）"),
+    ("L4","MECH-18"): ("已实现且已验","真值抽样≤3代检出（E81c，DS复现）——观测路径向上"),
+    ("L4","MECH-26"): ("已实现且已验","展示通道切除关闭自我美化悬案（E81，R2-T2-1）——通道类向上"),
+    ("L4","MECH-19"): ("已实现存疑","DS线漂移信号族（D4，单宇宙）"),
+    ("L4","MECH-20"): ("已实现存疑","DS线gap统计（D2，单宇宙）"),
+    ("L4","MECH-21"): ("已实现存疑","DS线多源分歧信号（D1，单宇宙）"),
+    ("L5","MECH-13"): ("已实现存疑","GPG签名=人类令牌（registry note）"),
+    ("L5","MECH-14"): ("已实现且已验","能力式安全：违反铁律写不进去 5/5（DS-P4）——执法路径向上"),
+    ("L1","MECH-01"): ("已实现且已验","门控决定L1采纳（E7/E13系；DS-R1-2门控退化对照）"),
+    ("L1","MECH-12"): ("已实现且已验","事件溯源保L1完整性（REAL-X4四项全胜）"),
+    ("L1","MECH-25"): ("已实现且已验","doctor检出L1写入损坏4/4（T4-4）"),
+}
+LVS = ["L0","L1","L2","L3","L4","L5"]
+
+def own_status(mid, reg_status):
+    if mid in PLANNED:
+        return "计划中"
+    if reg_status == "refuted":
+        return "已证伪"
+    if reg_status == "active":
+        return "已实现且已验" if mid in VERIFIED else "已实现存疑"
+    return "已实现存疑"  # unknown（非 MECH-28）
+
+rows, empty = [], []
+for m in mechs:
+    mid, name, st = m["mechanism_id"], m["name"], m["status"]
+    lo = own[mid]
+    for lv in LVS:
+        key = (lv, mid)
+        if key in EXC:
+            val, basis = EXC[key]
+        elif lv == lo:
+            val = own_status(mid, st)
+            basis = "自有层（phase7 定级）+ registry %s" % st
+        elif LVS.index(lv) > LVS.index(lo):
+            val = "因果不可达"
+            basis = "写路径半序：向上不可达（guide §一.2）"
+        else:
+            if st == "refuted":
+                val = "被证伪后放弃"
+                basis = "主实现已证伪（registry refuted）"
+            else:
+                val = "空白-没人做过"
+                basis = "写路径向下可及但无验证记录（guide §一.3 默认）"
+        rows.append({"L_level": lv, "mech_id": mid, "mech_name": name,
+                     "cell_status": val, "basis": basis})
+        if val in ("空白-没人做过", "被证伪后放弃"):
+            empty.append({"L_level": lv, "mech_id": mid, "why": val})
+
+assert len(rows) == 270, "格子数 != 270"
+# own 层分布校验
+own_cells = [r for r in rows if r["L_level"] == own[r["mech_id"]]]
+cnt = collections.Counter(r["cell_status"] for r in own_cells)
+exp = {"已实现且已验": 13, "已实现存疑": 19, "计划中": 1, "已证伪": 12}
+assert cnt == collections.Counter(exp), "own 层分布 %s != %s" % (dict(cnt), exp)
+
+with io.open(AUD + r"\lm-matrix.csv", "w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["L_level","mech_id","mech_name","cell_status","basis"])
+    w.writeheader(); w.writerows(rows)
+with io.open(AUD + r"\data\phase8-empty-cells.csv", "w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["L_level","mech_id","why"])
+    w.writeheader(); w.writerows(empty)
+
+out = []
+out.append("== LM 矩阵 270 格状态分布 ==")
+for k, v in collections.Counter(r["cell_status"] for r in rows).most_common():
+    out.append("  %-12s %d" % (k, v))
+out.append("")
+out.append("== 每层构成（行视角）==")
+for lv in LVS:
+    c = collections.Counter(r["cell_status"] for r in rows if r["L_level"] == lv)
+    out.append("  %s: %s" % (lv, dict(c)))
+out.append("")
+out.append("== 空白格（未来机制系统化来源）==")
+for lv in LVS:
+    e1 = [r["mech_id"] for r in empty if r["L_level"] == lv and r["why"] == "空白-没人做过"]
+    e2 = [r["mech_id"] for r in empty if r["L_level"] == lv and r["why"] == "被证伪后放弃"]
+    out.append("  %s 没人做过=%d %s" % (lv, len(e1), " ".join(e1)))
+    if e2:
+        out.append("  %s 被证伪后放弃=%d %s" % (lv, len(e2), " ".join(e2)))
+out.append("")
+out.append("实现层覆盖：已验格（含跨层例外）=%d / 270" % sum(1 for r in rows if r["cell_status"]=="已实现且已验"))
+out.append("ALL ASSERTS PASS")
+print("\n".join(out))
+with io.open(AUD + r"\data\phase8-summary.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")

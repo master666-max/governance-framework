@@ -1,0 +1,129 @@
+# -*- coding: utf-8 -*-
+"""gap_dedup.txt — 阶段2收尾终筛：
+gap_scan 候选 → (a)同 sha256 已有入账副本 → COPY-SKIP；(b)lit 线文件 → LIT-DEFER；
+(c)代码/数据/引擎包 → 既有边界。输出最终提取清单（分批分组）。
+"""
+import os, csv, json, hashlib, re, sys
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+# 1. 重建 gap_scan 候选（同 gap_scan.txt 逻辑）
+covered = set()
+with open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig") as f:
+    for row in csv.DictReader(f):
+        covered.add(row["source_file"])
+
+SKIP_TOP = {"workspace-audit", ".git", "语料分析", "迷深清洗工作", "mepub",
+            "comfyui-docx-scratch", "实验性双库工作区", "attic", "archive",
+            "soul", "tools", "workspace"}
+PKG_PREFIX = tuple(d for d in os.listdir(ROOT) if d.startswith("library-bootstrap"))
+SKIP_SUB = {"__pycache__", "node_modules", "attic_upgrade_v39", "experimental",
+            "experimental-l8", "experimental-l9", "modules", "adapters", "skills",
+            "ledger", "memory", "presets"}
+DATA_DIRS = {"runs", "sandbox", "unified", "自演化离线实验", "自演化离线实验_v3",
+             "自演化离线实验_v4", "candidates"}
+CODE_OR_DATA = re.compile(r"\.(py|js|json|tsv|zip|7z|pyc)$|(^|/)proto/|env_check")
+
+candidates = []
+for dirpath, dirnames, filenames in os.walk(ROOT):
+    rel = os.path.relpath(dirpath, ROOT).replace("\\", "/")
+    top = rel.split("/")[0] if rel != "." else ""
+    if top in SKIP_TOP:
+        dirnames[:] = []
+        continue
+    if rel == ".":
+        dirnames[:] = [d for d in dirnames if not d.startswith("library-bootstrap")]
+    dirnames[:] = [d for d in dirnames if d not in SKIP_SUB and d not in (".git", "__pycache__")]
+    for fn in filenames:
+        rp = fn if rel == "." else rel + "/" + fn
+        if rp in covered:
+            continue
+        candidates.append(rp)
+
+# 2. files.jsonl 哈希索引（路径可能已迁移：衔尾蛇副本/ → 大审查/衔尾蛇/attic/…）
+hash2path = {}
+with open(os.path.join(AUD, "data", "files.jsonl"), encoding="utf-8", errors="replace") as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        hash2path.setdefault(r["sha256"], []).append(r["path"])
+
+def sha256_of(rp):
+    try:
+        h = hashlib.sha256()
+        with open(os.path.join(ROOT, rp), "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 16), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+# 3. 分类
+LIT_DEFER = re.compile(r"引用论文总表")
+final, skipped_copy, skipped_lit, skipped_code = [], [], [], []
+for rp in sorted(set(candidates)):
+    if rp.startswith(".zcode/"):
+        skipped_code.append((rp, "harness-plans"))
+        continue
+    if LIT_DEFER.search(rp):
+        skipped_lit.append((rp, "lit-line 阶段6"))
+        continue
+    if CODE_OR_DATA.search(rp):
+        skipped_code.append((rp, "code/data"))
+        continue
+    seg = rp.split("/")
+    if any(s in DATA_DIRS for s in seg[:-1]):
+        skipped_code.append((rp, "data-dir"))
+        continue
+    if not rp.endswith((".md", ".txt", ".csv")):
+        skipped_code.append((rp, "ext"))
+        continue
+    h = sha256_of(rp)
+    dup_covered = False
+    if h and h in hash2path:
+        for p2 in hash2path[h]:
+            if p2 != rp and p2 in covered:
+                dup_covered = True
+                break
+    if dup_covered:
+        skipped_copy.append((rp, "hash-dup-of-covered"))
+        continue
+    final.append(rp)
+
+# 4. 分批
+def batch_of(rp):
+    if rp.startswith("knowledge/"): return "A-know"
+    if rp.startswith("大审查/混元/"): return "B-sim3"
+    if rp.startswith("大审查/reports/") or rp.startswith("大审查/") and "/" not in rp[len("大审查/"):]: return "C-part2"
+    if rp.startswith("大审查/deepseek/"): return "E-ds2"
+    if rp.startswith("大审查/衔尾蛇/attic/"): return "X-snapshot"
+    return "D-real2"
+
+groups = {}
+for rp in final:
+    groups.setdefault(batch_of(rp), []).append(rp)
+
+print("=== FINAL EXTRACT LIST ===")
+for g in sorted(groups):
+    print(f"\n## {g} ({len(groups[g])})")
+    for rp in groups[g]:
+        print(" ", rp)
+print(f"\nTOTAL-EXTRACT {len(final)} | COPY-SKIP {len(skipped_copy)} | LIT-DEFER {len(skipped_lit)} | CODE/DATA-SKIP {len(skipped_code)}")
+print("\n=== COPY-SKIP ===")
+for rp, why in skipped_copy:
+    print(" ", rp, "→", why)
+
+with open(os.path.join(AUD, "data", "gap-final-list.txt"), "w", encoding="utf-8") as f:
+    for g in sorted(groups):
+        f.write(f"## {g} ({len(groups[g])})\n")
+        for rp in groups[g]:
+            f.write(rp + "\n")
+        f.write("\n")
+    f.write(f"TOTAL-EXTRACT {len(final)} | COPY-SKIP {len(skipped_copy)} | LIT-DEFER {len(skipped_lit)} | CODE/DATA-SKIP {len(skipped_code)}\n")
+print("list → data/gap-final-list.txt")

@@ -1,0 +1,185 @@
+# -*- coding: utf-8 -*-
+"""phase7_grade.txt — 阶段7 L 轴定级脚本（规则=tools/phase7-guide.md v1 冻结版）
+- 机制 45 条：§三关键词定级（L5→L0 首个命中；UNMATCHED→exit 1）
+- 事故 23+1 条：层级=guide §四冻结判定；severity/blindness=§二关键词（先高后低首中）
+- incident-log.csv 追加 INC-02..24（摘录=账本逐字回查）
+- 单调性：盲度中位数随 L 非降（P1 主检验）；破坏度并陈（P2 预测不单调）
+"""
+import csv, io, sys, re, collections, statistics
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+claims = read_csv(AUD + r"\claim_ledger.csv")
+mechs = read_csv(AUD + r"\mechanism-registry.csv")
+slog = read_csv(AUD + r"\supersede_log.csv")
+sup_ids = set(r["old_claim_id"] for r in slog)
+cur = [c for c in claims if c["status"] != "superseded" and c["claim_id"] not in sup_ids]
+
+# ---- §三 机制定级关键词（顺序即优先级） ----
+MECH_KW = [
+    ("L5", ["人侧签名", "宪章", "治理", "授权", "公理", "铁律", "GPG"]),
+    ("L4", ["指标定义", "效用", "meta_log", "自标定", "元参数", "评价", "目标函数", "自报", "留出集", "Goodhart", "地形", "判断样本"]),
+    ("L3", ["门控", "门", "审计", "判据", "判别", "阈值", "margin", "sandbox", "registry", "引擎", "内核", "状态机", "doctor", "哈希", "链", "事件溯源", "git", "显著性", "真值抽样", "gap", "早警", "分歧信号", "监控", "护栏", "法层", "参数稳定门", "调优", "步长"]),
+    ("L2", ["模板", "内容体", "SOP", "流程", "算子", "固化", "整理", "技能", "脚本", "睡眠", "管线", "采样", "恢复", "回滚"]),
+    ("L1", ["条目", "记忆", "权重", "检索", "排序", "衰减", "重要度", "淘汰", "归档", "遗忘", "档案", "写入", "归并", "迁移", "过滤", "剔除", "拒绝", "w_age"]),
+    ("L0", ["展示通道", "话术", "呈现"]),
+]
+def grade_mech(text):
+    for lv, kws in MECH_KW:
+        for kw in kws:
+            if kw in text:
+                return lv, kw
+    return None, None
+
+mech_rows = []
+for m in mechs:
+    text = m["name"] + "｜" + m.get("evidence_note", "")
+    lv, kw = grade_mech(text)
+    if lv is None:
+        print("FATAL: 机制无命中:", m["mechanism_id"], m["name"])
+        sys.exit(1)
+    mech_rows.append({"obj": "MECH:" + m["mechanism_id"], "name": m["name"],
+                      "status": m["status"], "layer": lv, "matched_kw": kw,
+                      "severity": "", "blindness": "", "anchor": m["first_seen_anchor"]})
+
+# ---- §二 事故双度量关键词 ----
+SEV = [(4, ["爆炸", "刷分", "绕过", "丢更新", "静默", "不可逆", "决定性", "全盲", "0 次触发", "全错"]),
+       (3, ["失效", "退化到", "锁死", "停摆", "未拦", "降到 −", "劣化", "净损失", "作废"]),
+       (2, ["误报", "漂移", "污染", "不一致", "口径", "手抄", "手算", "违规", "方差", "错位", "死区", "撞号"]),
+       (1, ["行号", "措辞", "外观", "计数", "写死"])]
+BLI = [(3, ["全绿", "静默", "刷分", "0 次触发"]),
+       (2, ["同源", "盲评", "真值抽样"]),
+       (1, ["doctor", "检出", "拦", "审计"]),
+       (0, ["测试", "assert", "lint", "复跑"])]
+def measure(text, table):
+    for v, kws in table:
+        for kw in kws:
+            if kw in text:
+                return v, kw
+    return 0, "默认"
+
+# ---- §四 冻结事故表（层级判定冻结于 guide；短语回查账本） ----
+INC = [
+    ("INC-02", "SIM-E14", "自报 +0.51，真实 −0.09", "MECH-03", "L4"),
+    ("INC-03", "DS-P3", "同一个被表象污染的 judge", "MECH-03/18", "L4"),
+    ("INC-04", "SIM-E40", "退化到 −0.1124", "-", "L4"),
+    ("INC-05", "DS-R1-3", "多主线并发写", "-", "L1"),
+    ("INC-06", "DS-R1-3", "截断后链连续+根自洽", "MECH-13/25", "L3"),
+    ("INC-07", "SIM-E112", "爆炸到 7–27", "MECH-40", "L1"),
+    ("INC-08", "SIM-E24", "margin 被降到 −0.04", "MECH-38", "L4"),
+    ("INC-09", "SIM-E95b", "目标函数构造所污染", "-", "L4"),
+    ("INC-10", "*", "过早重组", "MECH-23", "L2"),
+    ("INC-11", "VERIF-X5", "计数口径不统一", "-", "L0"),
+    ("INC-12", "PART2-FINAL", "三次流程违规", "-", "L3"),
+    ("INC-13", "PART2-PREREG-7", "初稿手算两处错", "-", "L3"),
+    ("INC-14", "DEPLOY-V39", "recall@5 劣化 0.485→0.394", "MECH-16", "L3"),
+    ("INC-15", "DEPLOY-V32", "绕过幻觉检测刷分", "-", "L4"),
+    ("INC-16", "SIM-E34", "92% 误报", "MECH-03", "L3"),
+    ("INC-17", "SIM-E91", "零乘锁死", "-", "L2"),
+    ("INC-18", "KB-TASK-014", "chdir", "-", "L2"),
+    ("INC-19", "KB-TASK-018", "静默丢弃", "-", "L2"),
+    ("INC-20", "CB-MEMEVOLVE", "未标定的护栏是伤害源", "MECH-01族", "L3"),
+    ("INC-21", "SIM-E8", "自报 0.094 vs 真实 0.025", "MECH-04", "L4"),
+    ("INC-22", "SIM-CODEAUDIT", "自测结论写死", "-", "L2"),
+    ("INC-23", "REVIEW-豆包", "行号在 v3.8.2 已漂移", "-", "L0"),
+    ("INC-24", "DEPLOY-V39", "pilot 首跑静默丢数据", "-", "L2"),
+]
+# 方法论-01 已在 incident-log；其度量取 incident-log 现行行文本
+with io.open(AUD + r"\incident-log.csv", encoding="utf-8-sig", newline="") as f:
+    inclog = list(csv.DictReader(f))
+m01 = " ".join(r["事故描述摘录"] for r in inclog if r["实验ID"] == "方法论-01")
+sev01, kw01 = measure(m01, SEV)
+bli01, bkw01 = measure(m01, BLI)
+
+inc_rows, log_append = [], []
+for iid, exp, phrase, mech, layer in INC:
+    hits = [c for c in cur if phrase in c["verbatim_quote"] and (exp == "*" or c["experiment_id"] == exp)]
+    if not hits:
+        print("FATAL: 事故回查 0 命中:", iid, exp, phrase)
+        sys.exit(1)
+    hits.sort(key=lambda c: c["claim_id"])
+    c = hits[0]
+    sev, skw = measure(c["verbatim_quote"], SEV)
+    bli, bkw = measure(c["verbatim_quote"], BLI)
+    inc_rows.append({"obj": iid, "name": exp + "｜" + phrase, "status": c["status"],
+                     "layer": layer, "matched_kw": "sev:" + str(skw) + " bli:" + str(bkw),
+                     "severity": str(sev), "blindness": str(bli),
+                     "anchor": c["location_anchor"] + "（命中 %d 条，取 claim_id 最小）" % len(hits)})
+    log_append.append({"实验ID": exp, "事故描述摘录": c["verbatim_quote"],
+                       "涉及机制": mech, "死因分类": iid})
+
+inc_rows.insert(0, {"obj": "INC-01", "name": "方法论-01（incident-log 既有）", "status": "-",
+                    "layer": "L5", "matched_kw": "sev:" + str(kw01) + " bli:" + str(bkw01),
+                    "severity": str(sev01), "blindness": str(bli01),
+                    "anchor": "workspace-audit/incident-log.csv:2"})
+
+# ---- incident-log 追加（幂等：已含 INC-xx 者跳过） ----
+have = set(r["死因分类"] for r in inclog)
+newrows = [r for r in log_append if r["死因分类"] not in have]
+if newrows:
+    with io.open(AUD + r"\incident-log.csv", "a", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["实验ID", "事故描述摘录", "涉及机制", "死因分类"])
+        w.writerows(newrows)
+
+# ---- 落盘 grades ----
+with io.open(AUD + r"\data\phase7-grades.csv", "w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["obj", "name", "status", "layer", "matched_kw",
+                                      "severity", "blindness", "anchor"])
+    w.writeheader(); w.writerows(mech_rows); w.writerows(inc_rows)
+
+# ---- summary ----
+out = []
+out.append("== 机制 L 分布（45，机械关键词定级）==")
+mdist = collections.Counter(r["layer"] for r in mech_rows)
+for lv in ["L5", "L4", "L3", "L2", "L1", "L0"]:
+    out.append("  %s: %d  %s" % (lv, mdist.get(lv, 0),
+                                 " ".join(r["obj"].replace("MECH:", "") for r in mech_rows if r["layer"] == lv)))
+out.append("")
+out.append("== 事故 ×（层级，破坏度，盲度）==")
+for r in inc_rows:
+    out.append("  %s %s sev=%s bli=%s | %s" % (r["obj"], r["layer"], r["severity"], r["blindness"], r["anchor"][:60]))
+out.append("")
+out.append("== 单调性检验（P1 主检验：盲度中位数随 L 非降）==")
+med = {}
+for lv in ["L0", "L1", "L2", "L3", "L4", "L5"]:
+    vals = [int(r["blindness"]) for r in inc_rows if r["layer"] == lv]
+    if vals:
+        med[lv] = statistics.median(vals)
+        out.append("  %s: n=%d 盲度中位数=%.1f 值=%s" % (lv, len(vals), med[lv], sorted(vals)))
+order = [med.get(lv) for lv in ["L0", "L1", "L2", "L3", "L4", "L5"] if lv in med]
+seq = [m for m in order if m is not None]
+mono = all(seq[i] <= seq[i + 1] for i in range(len(seq) - 1))
+out.append("  序列=%s → verdict=%s" % (seq, "单调" if mono else "存在反例"))
+viol = [(["L0","L1","L2","L3","L4","L5"][i], ["L0","L1","L2","L3","L4","L5"][i+1])
+        for i in range(len(seq)-1) if seq[i] > seq[i+1]]
+if viol:
+    out.append("  下降对=%s" % viol)
+out.append("")
+out.append("== P2 副检验：破坏度分布（预测不单调，并陈）==")
+for lv in ["L0", "L1", "L2", "L3", "L4", "L5"]:
+    vals = [int(r["severity"]) for r in inc_rows if r["layer"] == lv]
+    if vals:
+        out.append("  %s: n=%d 破坏度=%s（max=%d）" % (lv, len(vals), sorted(vals), max(vals)))
+out.append("")
+out.append("== 规格三预期交叉检验（§五）==")
+m30 = next((r for r in mech_rows if r["obj"] == "MECH:MECH-30"), None)
+m02 = next((r for r in mech_rows if r["obj"] == "MECH:MECH-02"), None)
+i08 = next((r for r in inc_rows if r["obj"] == "INC-08"), None)
+i10 = next((r for r in inc_rows if r["obj"] == "INC-10"), None)
+i02 = next((r for r in inc_rows if r["obj"] == "INC-02"), None)
+out.append("  规格'E14→目标层': INC-02 层=%s → %s" % (i02["layer"], "一致" if i02["layer"] == "L4" else "不一致"))
+out.append("  规格'E28 现象(=X6b)→流程层': INC-10 层=%s → %s" % (i10["layer"], "一致" if i10["layer"] == "L2" else "不一致"))
+out.append("  规格'E11 现象(=E24)→目标层': INC-08 层=%s → %s" % (i08["layer"], "一致" if i08["layer"] == "L4" else "不一致"))
+out.append("  名实差异对照: SIM-E28 本体 MECH-30 层=%s；SIM-E11 本体 MECH-02 层=%s（独立定级，不受规格预期影响）"
+           % (m30["layer"], m02["layer"]))
+out.append("")
+out.append("incident-log 追加 %d 行（幂等跳过 %d）" % (len(newrows), len(log_append) - len(newrows)))
+out.append("ALL ASSERTS PASS")
+print("\n".join(out))
+with io.open(AUD + r"\data\phase7-summary.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")

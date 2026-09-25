@@ -1,0 +1,47 @@
+# -*- coding: utf-8 -*-
+"""ingest_extract.txt — 子代理中间清单入账器（阶段2 主入账口）
+用法：py -X utf8 tools/ingest_extract.txt <extract.jsonl 相对路径> [max_N]
+逐条调 ledger_add_extract 程序化截取（锚点不符即拒），成功入 claim_ledger.csv。
+失败条目落 data/ingest-errors-<名>.jsonl 供回炉。幂等：重跑只加新。"""
+import os, sys, json, datetime
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ns = {}
+exec(compile(open(os.path.join(AUD, "tools", "ledger_tool.txt"), encoding="utf-8").read(), "ledger_tool", "exec"), ns)
+ledger_add_extract = ns["ledger_add_extract"]
+
+src = sys.argv[1]
+maxn = int(sys.argv[2]) if len(sys.argv) > 2 else None
+path = os.path.join(AUD, src)
+ok = dup = fail = 0
+errs = []
+rows = []
+with open(path, encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            rows.append(json.loads(line))
+if maxn:
+    rows = rows[:maxn]
+for r in rows:
+    try:
+        cid, res = ledger_add_extract(r["file"], r["line"], r["start_anchor"], r["end_anchor"],
+                                      r["claim_type"], r["experiment_id"], r.get("source_type", "document"),
+                                      r["status"])
+        if res == "added":
+            ok += 1
+        else:
+            dup += 1
+    except (ValueError, KeyError, OSError) as e:
+        fail += 1
+        errs.append({**r, "error": str(e)})
+print(f"{src}: 入账 {ok}，重复 {dup}，失败 {fail} / 共 {len(rows)}")
+if errs:
+    base = os.path.basename(src).replace(".jsonl", "")
+    ep = os.path.join(AUD, "data", f"ingest-errors-{base}.jsonl")
+    with open(ep, "w", encoding="utf-8") as f:
+        for e in errs:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    print(f"失败明细 → {ep}")
+    for e in errs[:8]:
+        print(f"  ERR {e['file']}:{e['line']} {e['error'][:80]}")

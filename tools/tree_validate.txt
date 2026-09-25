@@ -1,0 +1,197 @@
+# -*- coding: utf-8 -*-
+"""tree_validate.txt — 阶段3 校验+统计+渲染
+1) 边表机械校验：anchor 存在于 claim_ledger；from/to 是合法节点或枢纽
+2) 时序校验：同族编号倒流 → TIME-ANOMALY（只登记不裁决）；SIM 作为最早宇宙被
+   后宇宙"启发/取代"的边 → TIME-ANOMALY 候选
+3) ghost_list.csv：机械悬空候选的裁决记录
+4) 统计：触点节点数/边数/最大连通簇/最深链（无 contradicts 有向子集）
+5) 渲染 20-分支树.mmd（按宇宙 subgraph，节点=触点 experiment_id）
+"""
+import os, csv, re, collections
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+
+# ---------- 载入 ----------
+led = {}
+sup = {r["old_claim_id"] for r in csv.DictReader(open(os.path.join(AUD, "supersede_log.csv"), encoding="utf-8-sig"))}
+for r in csv.DictReader(open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig")):
+    if r["claim_id"] not in sup:
+        led[r["location_anchor"]] = r
+nodes = set()
+for r in csv.DictReader(open(os.path.join(AUD, "data", "tree-nodes.csv"), encoding="utf-8-sig")):
+    nodes.add(r["experiment_id"])
+HUBS = {"SIM", "REAL", "R2", "R2A", "DS", "PART2", "VERIF", "DB", "CB", "GLM",
+        "QWEN", "KB", "PART1", "L8LAB", "DEPLOY", "META", "REVIEW", "SYN", "PLAN", "RADAR"}
+edges = list(csv.DictReader(open(os.path.join(AUD, "tree_edges.csv"), encoding="utf-8-sig")))
+
+# ---------- 1) 机械校验 ----------
+bad = []
+for e in edges:
+    if e["relation"] not in {"motivated_by", "replicates", "extends", "refutes", "supersedes", "contradicts", "forked_from"}:
+        bad.append((e, "relation 非法"))
+    if e["anchor"] not in led:
+        bad.append((e, "anchor 不在账本"))
+    for k in ("from_id", "to_id"):
+        if e[k] not in nodes and e[k] not in HUBS:
+            bad.append((e, f"{k}={e[k]} 非节点非枢纽"))
+print(f"边 {len(edges)} 条；机械校验失败 {len(bad)} 条")
+for e, why in bad[:10]:
+    print("  BAD:", e["from_id"], e["relation"], e["to_id"], "→", why)
+
+# ---------- 2) 时序校验 ----------
+def order_key(eid):
+    """返回 (family, ordinal)；无序信息返回 None"""
+    m = re.match(r"^SIM-E(\d+)$", eid)
+    if m: return ("SIM-E", int(m.group(1)))
+    m = re.match(r"^SIM-WEB-E(\d+)$", eid)
+    if m: return ("SIM-E", int(m.group(1)))
+    m = re.match(r"^SIM-R(\d+)$", eid)
+    if m: return ("SIM-R", int(m.group(1)))
+    if eid == "SIM-SUM": return ("SIM-SUM", 1)
+    if eid == "SIM-SUM14": return ("SIM-SUM", 2)
+    if eid == "SIM-REPORT": return ("SIM-SUM", 3)
+    if eid == "SIM-SUM23": return ("SIM-SUM", 4)
+    if eid == "SIM-SUM25": return ("SIM-SUM", 5)
+    m = re.match(r"^SIM-R(\d+)WEB$", eid)
+    if m: return ("SIM-R", int(m.group(1)))
+    m = re.match(r"^REAL-X(\d+)([abc]?)$", eid)
+    if m: return ("REAL-X", int(m.group(1)) * 10 + ord(m.group(2) or "a") - ord("a"))
+    m = re.match(r"^DS-(PROBE|R)(\d+)", eid)
+    if m:
+        base = {"PROBE": 0, "R": 100}[m.group(1)]
+        return ("DS", base + int(m.group(2)))
+    if eid == "DS-SUM-V2": return ("DS-SUM", 1)
+    if eid == "DS-SUM-V31": return ("DS-SUM", 2)
+    if eid == "DS-FINAL": return ("DS-SUM", 0)
+    m = re.match(r"^PART2-(PREREG|RND)-(\d+)$", eid)
+    if m: return ("PART2", int(m.group(2)) * 2 + (0 if m.group(1) == "PREREG" else 1))
+    m = re.match(r"^R2A?-(SUM-)?T(\d+)-(\d+)$", eid)
+    if m: return ("R2", int(m.group(2)) * 100 + int(m.group(3)))
+    if eid == "R2-SUM-T1": return ("R2", 150)
+    m = re.match(r"^KB-TASK-(\d+)$", eid)
+    if m: return ("KB", int(m.group(1)))
+    return None
+
+DIRECTIONAL = {"motivated_by", "replicates", "extends", "forked_from", "supersedes"}
+anomalies = []
+for e in edges:
+    if e["relation"] not in DIRECTIONAL:
+        continue
+    kf, kt = order_key(e["from_id"]), order_key(e["to_id"])
+    if kf and kt and kf[0] == kt[0] and kf[1] < kt[1]:
+        anomalies.append((e["from_id"], e["relation"], e["to_id"], f"同族({kf[0]})倒流 {kf[1]}<{kt[1]}"))
+    # SIM 是最早宇宙：非 SIM from 指向 SIM to 且方向性关系=反向依赖（SIM motivated_by X）
+    if e["relation"] == "motivated_by" and e["from_id"].startswith("SIM") and not e["to_id"].startswith("SIM"):
+        anomalies.append((e["from_id"], e["relation"], e["to_id"], "最早宇宙被后宇宙启发"))
+    if "TIME-ANOMALY" in e.get("inferred_reason", ""):
+        anomalies.append((e["from_id"], e["relation"], e["to_id"], "建边员自标"))
+print(f"TIME-ANOMALY 候选 {len(anomalies)} 条（只登记不裁决）")
+for a in anomalies:
+    print("  ANOMALY:", a)
+
+# ---------- 3) ghost_list.csv ----------
+ghosts = [
+    ["E0", 9, "库调试工作区/references/两轴模型与演化授权-v1.md:12",
+     "E0–E4（两轴模型信任轴档位，非 SIM 实验号）", "命名空间冲突·已消解（两轴模型 E 档）"],
+    ["E4", 9, "库调试工作区/references/两轴模型与演化授权-v1.md:14",
+     "L9 库缺锚定/评测时不得开 E4（信任轴档位）", "命名空间冲突·已消解（两轴模型 E 档）"],
+    ["E132", 3, "大审查/混元/bootstrap_自演化推演_第二十八轮-网页端.md:48",
+     "网页端 E132（正确漂移构造，44 对）", "假阳性·节点 SIM-WEB-E132 存在（tree_scan 正则漏配 SIM-WEB- 前缀）"],
+]
+with open(os.path.join(AUD, "ghost_list.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["token", "mention_count", "sample_anchor", "context", "verdict"])
+    w.writerows(ghosts)
+print("ghost_list.csv：机械候选 3 条全部消解（0 真幽灵；消解依据已落盘）")
+
+# ---------- 4) 统计 ----------
+touched = set()
+for e in edges:
+    touched.add(e["from_id"]); touched.add(e["to_id"])
+adj = collections.defaultdict(set)
+uadj = collections.defaultdict(set)
+for e in edges:
+    uadj[e["from_id"]].add(e["to_id"])
+    uadj[e["to_id"]].add(e["from_id"])
+    if e["relation"] != "contradicts":  # 有向链排除对称矛盾边
+        adj[e["from_id"]].add(e["to_id"])
+# 连通簇（无向）
+seen, comps = set(), []
+for n in touched:
+    if n in seen:
+        continue
+    stack, comp = [n], set()
+    while stack:
+        x = stack.pop()
+        if x in comp:
+            continue
+        comp.add(x); seen.add(x)
+        stack.extend(uadj[x] - comp)
+    comps.append(comp)
+comps.sort(key=len, reverse=True)
+# 最深链（DFS 最长路，有向无 contradicts；环路防护）
+memo = {}
+def depth(n, trail):
+    if n in trail:
+        return 0  # 环截断
+    if n in memo:
+        return memo[n]
+    best = 0
+    for m in adj[n]:
+        best = max(best, depth(m, trail | {n}) + 1)
+    memo[n] = best
+    return best
+deepest, dlen = None, 0
+for n in touched:
+    d = depth(n, frozenset())
+    if d > dlen:
+        dlen, deepest = d, n
+# 找一条最深路径
+chain = [deepest]
+cur = deepest
+while True:
+    nxt = [(depth(m, frozenset()), m) for m in adj[cur]]
+    if not nxt:
+        break
+    _, best = max(nxt)
+    if depth(best, frozenset()) + 1 != depth(cur, frozenset(cur and ()) if False else frozenset()):
+        break
+    chain.append(best)
+    cur = best
+    if len(chain) > 40:
+        break
+
+print(f"\n=== 统计 ===")
+print(f"触点节点 {len(touched)} / 全节点 {len(nodes)}（孤立 {len(nodes)-len(touched)}）")
+print(f"边 {len(edges)}")
+print(f"连通簇 {len(comps)} 个；最大簇 {len(comps[0])} 节点；前5簇 {[len(c) for c in comps[:5]]}")
+print(f"最深链 {dlen+1} 节点，起点 {deepest}")
+print("最深链:", " → ".join(chain[:15]), "…" if len(chain) > 15 else "")
+
+# ---------- 5) mermaid ----------
+def mmd_id(s):
+    return "N_" + re.sub(r"[^A-Za-z0-9]", "_", s)
+
+uni_of = {}
+for eid in touched:
+    uni_of[eid] = eid.split("-")[0]
+lines = ["graph TD"]
+for u in sorted(set(uni_of.values())):
+    members = sorted(m for m in uni_of if uni_of[m] == u)
+    lines.append(f"  subgraph {mmd_id(u)}[\"{u}\"]")
+    for m in members:
+        lines.append(f"    {mmd_id(m)}[\"{m}\"]")
+    lines.append("  end")
+REL = {"motivated_by": "启", "replicates": "复", "extends": "扩", "refutes": "驳",
+       "supersedes": "替", "contradicts": "矛", "forked_from": "叉"}
+seen_e = set()
+for e in edges:
+    k = (e["from_id"], e["to_id"], e["relation"])
+    if k in seen_e:
+        continue
+    seen_e.add(k)
+    style = " -.->" if e["INFERRED"] == "yes" else " -->"
+    lines.append(f"  {mmd_id(e['from_id'])}{style}|{REL[e['relation']]}|{mmd_id(e['to_id'])}")
+with open(os.path.join(AUD, "20-分支树.mmd"), "w", encoding="utf-8") as f:
+    f.write("\n".join(lines) + "\n")
+print(f"20-分支树.mmd 渲染完成（{len(lines)} 行，{len(seen_e)} 条边，实线=有锚点 虚线=INFERRED）")

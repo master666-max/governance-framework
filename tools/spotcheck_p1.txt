@@ -1,0 +1,64 @@
+# -*- coding: utf-8 -*-
+"""spotcheck_p1.txt — 阶段1 锚点抽检
+对象：alias_map.csv / participants.csv / mechanism-registry.csv 的 anchor 字段。
+规则：ID 尾数逢 7（mechanism_id/alias 尾字符'7'），不足 10 条全抽。
+机械校验：锚点文件存在 + 行号在界内；输出锚点行原文前 120 字供语义核对。"""
+import os, csv, re, datetime, random
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = os.path.join(ROOT, "workspace-audit")
+
+def parse_anchor(a):
+    m = re.match(r"^(.+?):(\d+)", a)
+    if not m:
+        return None, None
+    return m.group(1), int(m.group(2))
+
+targets = []
+for fn, keycol, kwcol, anc in [("alias_map.csv", "alias", "canonical_id", "anchor"),
+                               ("participants.csv", "participant", "participant", "anchor"),
+                               ("mechanism-registry.csv", "mechanism_id", "name", "first_seen_anchor")]:
+    with open(os.path.join(AUD, fn), encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            targets.append((fn, row[keycol], row[anc], row[kwcol]))
+
+picked = [t for t in targets if t[1].endswith("7")]
+if len(picked) < 10:
+    picked = targets
+print(f"锚点总数 {len(targets)}，尾数7命中 {len([t for t in targets if t[1].endswith('7')])}，本次抽检 {len(picked)} 条")
+
+cache = {}
+results = []
+for fn, key, anchor, kw in picked:
+    fp, ln = parse_anchor(anchor)
+    ok, detail = False, ""
+    if fp is None:
+        detail = f"锚点不可解析: {anchor}"
+    else:
+        full = os.path.join(ROOT, fp)
+        if not os.path.exists(full):
+            detail = "文件不存在"
+        else:
+            if fp not in cache:
+                with open(full, encoding="utf-8", errors="replace") as f:
+                    cache[fp] = f.readlines()
+            lines = cache[fp]
+            if 1 <= ln <= len(lines):
+                ok = True
+                detail = lines[ln - 1].strip()[:120]
+            else:
+                detail = f"行号越界（文件共 {len(lines)} 行）"
+    results.append((fn, key, anchor, ok, detail))
+
+log = os.path.join(AUD, "audit-log.csv")
+with open(log, "a", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    ts = datetime.datetime.now().isoformat(timespec="seconds")
+    for fn, key, anchor, ok, detail in results:
+        w.writerow([f"P1:{fn}:{key}", "命中" if ok else "未命中", f"{anchor} | {detail}", ts, "1"])
+
+hit = sum(1 for r in results if r[3])
+print(f"机械校验：{hit}/{len(results)} 命中（文件存在+行号在界内）")
+for fn, key, anchor, ok, detail in results:
+    print(("OK " if ok else "MISS ") + f"[{fn}] {key} @ {anchor}")
+    print("     ", detail)

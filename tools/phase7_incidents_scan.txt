@@ -1,0 +1,36 @@
+# -*- coding: utf-8 -*-
+"""phase7_incidents_scan.txt — 事故候选机械扫描（阶段7 前置勘查，只读）
+从 claim_ledger 现行断言中按冻结关键词集收集事故候选（摘录已有锚点，R2/R5 自动满足）。
+"""
+import csv, io, collections, re
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+with io.open(ROOT + r"\workspace-audit\claim_ledger.csv", encoding="utf-8-sig", newline="") as f:
+    claims = list(csv.DictReader(f))
+
+KW = ["事故", "教训", "漂移", "爆炸", "污染", "静默", "丢更新", "翻车", "锁死", "停摆",
+      "绕过", "刷分", "objective hacking", "自错", "手抄", "行号", "错位", "不可逆",
+      "瞒", "假阳", "误报", "违规", "危机", "定时炸弹"]
+
+hits = []
+for c in claims:
+    if c["status"] in ("superseded",):
+        continue
+    q = c["verbatim_quote"]
+    kws = [k for k in KW if k in q]
+    if kws:
+        hits.append((c, kws))
+
+print("命中 %d 条（关键词去重前）" % len(hits))
+byexp = collections.Counter(c["experiment_id"] for c, _ in hits)
+print("按实验 top30:", byexp.most_common(30))
+print()
+print("== 候选明细（每实验取至多3条，按命中词数降序）==")
+seen = collections.Counter()
+for c, kws in sorted(hits, key=lambda x: -len(x[1])):
+    e = c["experiment_id"]
+    if seen[e] >= 3:
+        continue
+    seen[e] += 1
+    print("%-16s %-8s %s | %s" % (e, c["status"], "+".join(kws[:4]),
+                                  c["verbatim_quote"][:64].replace("\n", " ")))

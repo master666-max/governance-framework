@@ -1,0 +1,49 @@
+# -*- coding: utf-8 -*-
+"""phase5_fragments.txt — 生成 30-景观五区.md 的三张机械表片段（防手抄）"""
+import csv, io, collections
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+cl = {c["claim_id"]: c for c in read_csv(AUD + r"\claim_ledger.csv")}
+death = read_csv(AUD + r"\data\phase5-death-causes.csv")
+frontier = read_csv(AUD + r"\data\phase5-frontier-ranked.csv")
+edges = read_csv(AUD + r"\tree_edges.csv")
+nodes = read_csv(AUD + r"\data\tree-nodes.csv")
+uni = {n["experiment_id"]: n["universe"] for n in nodes}
+
+# 1) 坟场全列
+with io.open(AUD + r"\data\phase5-frag-graveyard.md", "w", encoding="utf-8") as f:
+    f.write("| 实验 | claim_id[:10] | 死因 | 摘录头（≤40字） |\n|---|---|---|---|\n")
+    for r in sorted(death, key=lambda r: (r["death_cause"], r["experiment_id"])):
+        q = r["quote_head"][:40]
+        f.write("| %s | `%s` | %s | %s |\n" % (r["experiment_id"], r["claim_id"][:10], r["death_cause"], q))
+
+# 2) 前线 Top-30
+with io.open(AUD + r"\data\phase5-frag-frontier.md", "w", encoding="utf-8") as f:
+    f.write("| IV | 实验 | open假设摘录（≤56字） |\n|---|---|---|\n")
+    for r in frontier[:30]:
+        f.write("| %s | %s | %s |\n" % (r["iv"], r["experiment_id"], r["quote_head"][:56]))
+
+# 3) tier-1 实验清单
+t1 = collections.Counter()
+for e in edges:
+    if e["relation"] in ("replicates", "extends") and e["to_id"] in uni \
+       and uni.get(e["from_id"]) and uni[e["from_id"]] != uni[e["to_id"]]:
+        t1[e["to_id"]] += 1
+with io.open(AUD + r"\data\phase5-frag-tier1.md", "w", encoding="utf-8") as f:
+    f.write("| 实验（to_id） | 所属宇宙 | 跨宇宙确认入边数 |\n|---|---|---|\n")
+    for k, v in t1.most_common():
+        f.write("| %s | %s | %d |\n" % (k, uni.get(k, "?"), v))
+
+# 4) contradicts 边全列（矛盾区）
+with io.open(AUD + r"\data\phase5-frag-contradicts.md", "w", encoding="utf-8") as f:
+    f.write("| from | to | 锚点 |\n|---|---|---|\n")
+    for e in edges:
+        if e["relation"] == "contradicts":
+            f.write("| %s | %s | %s |\n" % (e["from_id"], e["to_id"], e["anchor"]))
+
+print("done: 4 fragments")

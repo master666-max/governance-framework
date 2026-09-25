@@ -1,0 +1,21 @@
+# -*- coding: utf-8 -*-
+"""progress_hash.txt — 计算产出文件 行数+sha256（progress.md 防篡改登记用）"""
+import os, hashlib, sys
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+targets = sys.argv[1:] if len(sys.argv) > 1 else [
+    "00-PROMPT.md", "00-盘点.md", "00-文献清单.md", "00-重复表.csv",
+    "audit-log.csv", "progress.md", "data/files.jsonl", "data/nested-repos-baseline.txt",
+]
+for t in targets:
+    fp = os.path.join(AUD, t)
+    if not os.path.exists(fp):
+        print(f"{t}\tABSENT")
+        continue
+    h = hashlib.sha256()
+    with open(fp, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    with open(fp, "rb") as f:
+        lines = sum(1 for _ in f)
+    print(f"{t}\t{lines}\t{h.hexdigest()[:16]}")

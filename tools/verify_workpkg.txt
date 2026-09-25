@@ -1,0 +1,53 @@
+# -*- coding: utf-8 -*-
+"""verify_workpkg.txt — 临时工作包全量对账（源 vs 包，逐一 sha256）
+用法：py -X utf8 tools/verify_workpkg.txt
+退出码 0 = 完全一致。"""
+import os, hashlib, sys, json
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+SRC = os.path.join(ROOT, "大审查")
+DST = r"D:\临时工作区\大审查-工作包-20260909"
+
+def sha256_file(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for b in iter(lambda: f.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+def walk_rel(base):
+    out = {}
+    for dirpath, dirnames, filenames in os.walk(base):
+        for fn in filenames:
+            fp = os.path.join(dirpath, fn)
+            rel = os.path.relpath(fp, base).replace("\\", "/")
+            out[rel] = fp
+    return out
+
+src = walk_rel(SRC)
+dst = walk_rel(DST)
+print(f"源文件 {len(src)}，包内文件 {len(dst)}")
+
+only_src = sorted(set(src) - set(dst))
+only_dst = sorted(set(dst) - set(src))
+print(f"仅源有 {len(only_src)}，仅包有 {len(only_dst)}")
+for r in only_src[:10]:
+    print("   SRC-ONLY", r[:90])
+for r in only_dst[:10]:
+    print("   DST-ONLY", r[:90])
+
+diff = same = err = 0
+for rel in sorted(set(src) & set(dst)):
+    try:
+        if sha256_file(src[rel]) == sha256_file(dst[rel]):
+            same += 1
+        else:
+            diff += 1
+            if diff <= 10:
+                print("   HASH-DIFF", rel[:90])
+    except OSError as e:
+        err += 1
+        if err <= 5:
+            print("   IO-ERR", rel[:80], e)
+print(f"交集对账：一致 {same} / 不符 {diff} / IO错误 {err}")
+sys.exit(0 if (not only_src and not only_dst and diff == 0 and err == 0) else 1)

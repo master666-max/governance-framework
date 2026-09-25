@@ -1,0 +1,120 @@
+# -*- coding: utf-8 -*-
+"""phase4_content.txt — 阶段4 诊断透镜4：内容级覆盖估计
+对 v3 后仍 unmatched 的 A 断言：若其引文含 E 号（或 X/G/N/D/T 基号），
+检索 B（任意文件）中同基号且共享数字或裁决关键词的断言 —— 内容级覆盖。
+这是诊断口径（估计选择分歧的内容后果），不改预登记门槛判决。
+"""
+import os, csv, json, re, collections
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ROOT = os.path.dirname(AUD)
+TWIN = {"大审查/混元/实验设计.md": "大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验设计.md"}
+
+def norm_quote(q):
+    return "".join(ch for ch in q if not ch.isspace())
+
+def blind_quote(b):
+    fp = os.path.join(ROOT, b["file"])
+    with open(fp, encoding="utf-8", errors="replace") as fh:
+        text = fh.readlines()[b["line"] - 1].rstrip("\r\n")
+    i = text.find(b["start_anchor"])
+    j = text.find(b["end_anchor"], i + len(b["start_anchor"]))
+    return text[i:j + len(b["end_anchor"])]
+
+B = []
+for name in ["blind-sima", "blind-simb", "blind-simc"]:
+    with open(os.path.join(AUD, "data", "extract", name + ".jsonl"), encoding="utf-8") as f:
+        for raw in f:
+            if raw.strip():
+                B.append(json.loads(raw))
+bq = [norm_quote(blind_quote(b)) for b in B]
+
+sup = {r["old_claim_id"] for r in csv.DictReader(open(os.path.join(AUD, "supersede_log.csv"), encoding="utf-8-sig"))}
+A = [r for r in csv.DictReader(open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig"))
+     if r["claim_id"] not in sup and r["source_file"] in ({TWIN.get(b["file"], b["file"]) for b in B})]
+
+# 复现 v3 匹配（与 phase4_diff 相同规则）以拿 unmatched 集合
+b_line = [(TWIN.get(b["file"], b["file"]), b["line"]) for b in B]
+def best_match(i, window):
+    a = A[i]
+    la = int(a["location_anchor"].rsplit(":", 1)[1])
+    na = norm_quote(a["verbatim_quote"])
+    best = (0.0, None)
+    for j, (bf, ln) in enumerate(b_line):
+        if bf != a["source_file"] or abs(ln - la) > window:
+            continue
+        nb = bq[j]
+        if not na or not nb:
+            continue
+        inter = sum((collections.Counter(na) & collections.Counter(nb)).values())
+        c = inter / min(len(na), len(nb))
+        if c > best[0]:
+            best = (c, j)
+    return best
+
+pairs = []
+for i in range(len(A)):
+    c, j = best_match(i, 3)
+    if j is not None and c >= 0.6:
+        pairs.append((c, i, j))
+pairs.sort(reverse=True)
+used_a, used_b = set(), set()
+for c, i, j in pairs:
+    if i in used_a or j in used_b:
+        continue
+    used_a.add(i); used_b.add(j)
+unmatched = [i for i in range(len(A)) if i not in used_a]
+
+E_PAT = re.compile(r"\bE\d{1,3}[a-z]?\b")
+NUM_PAT = re.compile(r"\d+\.\d+|\b\d{2,}\b")
+VERDICT = ["复现", "未复现", "证伪", "推翻", "缩水", "翻案", "一致", "失败", "成功", "无差异", "显著"]
+
+with_base = no_base = 0
+content_covered = content_uncovered = 0
+uncovered_samples = []
+for i in unmatched:
+    a = A[i]
+    q = a["verbatim_quote"]
+    base = E_PAT.search(q)
+    nums = set(NUM_PAT.findall(q))
+    v_kw = [k for k in VERDICT if k in q]
+    if not base:
+        no_base += 1
+        # 无基号断言：退化为关键词+数字 全库搜索
+        ok = False
+        for j, qq in enumerate(bq):
+            if (nums and nums & set(NUM_PAT.findall(qq))) or (v_kw and any(k in qq for k in v_kw) and not nums):
+                ok = True
+                break
+        if ok:
+            content_covered += 1
+        else:
+            content_uncovered += 1
+            uncovered_samples.append((a["location_anchor"], q[:70]))
+        continue
+    with_base += 1
+    b_tok = base.group(0)
+    ok = False
+    for j, qq in enumerate(bq):
+        if b_tok in qq or b_tok in B[j].get("experiment_id", ""):
+            jn = set(NUM_PAT.findall(qq))
+            jv = [k for k in VERDICT if k in qq]
+            if (nums and nums & jn) or (v_kw and jv and set(v_kw) & set(jv)):
+                ok = True
+                break
+    if ok:
+        content_covered += 1
+    else:
+        content_uncovered += 1
+        uncovered_samples.append((a["location_anchor"], q[:70]))
+
+print(f"v3 后 A 未匹配 {len(unmatched)}：带基号 {with_base} / 无基号 {no_base}")
+print(f"内容级覆盖（任意文件同基号+共享数字或裁决词）：覆盖 {content_covered}（{content_covered/len(unmatched)*100:.1f}%）/ 未覆盖 {content_uncovered}")
+print("未覆盖样本（前 15）：")
+for anc, q in uncovered_samples[:15]:
+    print("  ", anc, "|", q)
+with open(os.path.join(AUD, "data", "phase4-content-uncovered.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["anchor", "quote_head"])
+    w.writerows(uncovered_samples)
+print("未覆盖全清单 → data/phase4-content-uncovered.csv")

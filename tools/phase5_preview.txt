@@ -1,0 +1,70 @@
+# -*- coding: utf-8 -*-
+"""phase5_preview.txt — 阶段5 数据预览（只读，规则冻结前的事实勘查）
+产出：refuted 全列 / open 假设清单 / tree-nodes 宇宙分布 / 边 id 匹配情况
+"""
+import csv, io, sys, collections
+
+BASE = r"D:\zcode专用！！！！危险！！！！！！！！！"
+LEDGER = BASE + r"\workspace-audit\claim_ledger.csv"
+EDGES  = BASE + r"\workspace-audit\tree_edges.csv"
+NODES  = BASE + r"\workspace-audit\data\tree-nodes.csv"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+claims = read_csv(LEDGER)
+edges  = read_csv(EDGES)
+nodes  = read_csv(NODES)
+
+# ledger_tool 口径的"现行"= 总行-status? 这里直接用 status 字段
+by_status = collections.Counter(c["status"] for c in claims)
+print("== status 分布（全 %d 行）==" % len(claims))
+for k, v in by_status.most_common():
+    print("  %s: %d" % (k, v))
+
+eff = [c for c in claims if c["status"] != "superseded"]
+print("有效断言（status != superseded）: %d" % len(eff))
+
+print()
+print("== refuted 断言全列（%d 条）==" % sum(1 for c in eff if c["status"]=="refuted"))
+for c in eff:
+    if c["status"] == "refuted":
+        q = c["verbatim_quote"][:70].replace("\n", " ")
+        print("  %s | %s | %s | %s" % (c["experiment_id"], c["claim_type"], c["location_anchor"][:52], q))
+
+print()
+open_by_type = collections.Counter(c["claim_type"] for c in eff if c["status"]=="open")
+print("== open 断言按类型 ==")
+for k, v in open_by_type.most_common():
+    print("  %s: %d" % (k, v))
+
+print()
+print("== open hypothesis 清单（%d 条，按实验）==" % sum(1 for c in eff if c["status"]=="open" and c["claim_type"]=="hypothesis"))
+byexp = collections.Counter(c["experiment_id"] for c in eff if c["status"]=="open" and c["claim_type"]=="hypothesis")
+for k, v in byexp.most_common():
+    print("  %s: %d" % (k, v))
+
+print()
+print("== tree-nodes 宇宙分布（%d 节点）==" % len(nodes))
+byu = collections.Counter(n["universe"] for n in nodes)
+for k, v in byu.most_common():
+    print("  %s: %d" % (k, v))
+
+node_ids = set(n["experiment_id"] for n in nodes)
+print()
+print("== 边 endpoint 匹配（%d 边）==" % len(edges))
+rel = collections.Counter(e["relation"] for e in edges)
+print("  relation 分布:", dict(rel))
+hit_to = sum(1 for e in edges if e["to_id"] in node_ids)
+hit_from = sum(1 for e in edges if e["from_id"] in node_ids)
+hit_both = sum(1 for e in edges if e["to_id"] in node_ids and e["from_id"] in node_ids)
+miss = sorted(set([e["to_id"] for e in edges if e["to_id"] not in node_ids] + [e["from_id"] for e in edges if e["from_id"] not in node_ids]))
+print("  to_id 在 nodes: %d/%d ; from_id 在 nodes: %d/%d ; 双端都在: %d" % (hit_to, len(edges), hit_from, len(edges), hit_both))
+print("  不在 nodes 的 endpoint:", miss)
+
+print()
+print("== 收敛确认候选：incoming replicates/extends 边的 to_id 分布 ==")
+conf = collections.Counter(e["to_id"] for e in edges if e["relation"] in ("replicates", "extends"))
+for k, v in conf.most_common(40):
+    print("  %s: %d" % (k, v))

@@ -1,0 +1,44 @@
+{
+  "aggregate_sha": "5547432504fa22dde9d3f491e6fae14c88089c650a21d5a47aa8f0ddbb965d94",
+  "component": "gov",
+  "conformance": [
+    {
+      "exit": 0,
+      "passed": 9,
+      "target": "<out>/vendored/gov",
+      "total": 9,
+      "what": "conformance --kernel(gov)"
+    }
+  ],
+  "files": {
+    "core/capabilities.py": "8ed6f5821ad7c1088bacb6364ec8e68d45c617e083af4115bec94074e477c2b9",
+    "core/gov_types.py": "f84eac4c2d0f74c189edcf1eebc9ed83a846c5949f85e8d481b6d765b8be079a",
+    "core/hashes.py": "b984140abf9a11b10b2b40ef068c523efed2e83c08660cd0f63b3e09ecaa3581",
+    "core/prereg.py": "4b9fe7892b1f3165cf7b5702bcbe533727fac6997c53c3d1913557194290712a",
+    "ledger/ledger.py": "101f4eef9dc1fe239cc17951dd5aedb932fef5ffe601789b075c3caf61584c74",
+    "ledger/schema.sql": "3a9b2ad81afe257539c48b667665ae3a842c66dd592661e527de049745c340c5"
+  },
+  "form": "vendored",
+  "gov_impl": "vendored",
+  "schema_version": 1,
+  "sources": {
+    "core/capabilities.py": "audit-kit/core/capabilities.py",
+    "core/gov_types.py": "audit-kit/core/gov_types.py",
+    "core/hashes.py": "audit-kit/core/hashes.py",
+    "core/prereg.py": "audit-kit/core/prereg.py",
+    "ledger/ledger.py": "audit-kit/ledger/ledger.py",
+    "ledger/schema.sql": "audit-kit/ledger/schema.sql"
+  },
+  "spec": "SPEC-内核接口与宿主契约-v1+v1.1增补-20260924",
+  "surface": [
+    "open",
+    "append",
+    "verify",
+    "count",
+    "head",
+    "rows"
+  ],
+  "versions": {
+    "audit-kit": "1.0.0"
+  }
+}

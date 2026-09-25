@@ -1,0 +1,118 @@
+# smell-baseline.txt — 坏味候选·已登记接受项（S1v2 · T5）
+# 格式：<kind> <path>:<line>   # <理由>     （kind ∈ {dup, magic}；注释可省）
+# 语义：重复块组内任一位置被登记即整组豁免；魔法数逐行豁免。
+# 纪律：新条目须**带理由**；修掉候选后应删除对应行（台账不许留僵尸）。
+
+# ── 测试夹具跨文件近似（3 份）：刻意保持每个测试文件独立可运行（本仓惯例），不抽公共件 ──
+dup evocore/tests/test_evocore.py:15        # entry() 夹具：三测试文件各持一份（独立可跑）
+dup evocore/tests/test_evocore.py:16        # 同上（夹具窗口 16-17）
+dup evocore/tests/test_evocore.py:17        # 同上（夹具窗口 17-18）
+dup evocore/tests/test_evocore_matrix.py:22 # 同上（矩阵侧夹具首行）
+dup evocore/tests/test_evocore_s1.py:31     # 同上（s1 侧夹具首行）
+dup evocore/tests/test_evocore_matrix.py:88 # 打分断言两行在矩阵内多处重现（逐用例显式，不抽 helper）
+dup evocore/tests/test_evocore_matrix.py:157 # 三 intent 断言行在矩阵内逐用例显式重现（同上）
+dup evocore/tests/test_evocore_matrix.py:158 # conflict 调用两行在矩阵内多例重现（同上）
+
+# ── 测试时基年份：datetime 构造惯用（非机制参数）──
+magic evocore/tests/test_evocore.py:13        # NOW = datetime(2026,9,21,...) 年份字面量
+magic evocore/tests/test_evocore_matrix.py:15 # 同上
+magic evocore/tests/test_evocore_s1.py:23     # 同上
+
+# ── S3 新增：跨树同一公式（检查器在 audit-kit/、构建器在 build/，不可共享代码）──
+# 机制：build/tests/test_kb.py::test_aggregate_formula_synced 逐位钉同源（两实现必须相等）。
+dup audit-kit/conformance.py:124   # == build/make_kb.py:45（清单聚合公式；同步测试钉同源）
+
+# ── S8-4 新增（20260923 开工批）：人侧仲裁通道在**三形态各一份实现** ──
+# 为什么不算坏味：融合件（微内核）按纪律必须**自包含**（源码不得出现宿主名、不引外部包），
+# 中库 CLI 与服务件 ops 又各自独立部署 ⇒ 同一语义的 override 通道天然三份。
+# 漂移防线：build/tests/test_override_channels.py::test_three_forms_same_kind_and_payload
+#           逐位对拍三形态留痕（kind/actor/payload 键集/终裁内容），任一形态走偏即红。
+dup evo-seat/evo_seat.py:522               # override 的 payload 组装+入账打印（三形态同语义：融合/中库/服务件）
+dup evo-seat/evo_seat.py:528               # 同上（打印段第二窗口）
+dup evo-seat/evo_seat.py:677               # override 子命令 argparse 参数声明（三形态同形）
+dup build/kb_template/tools/kb.py:164      # target_seq 在账校验（中库↔服务件同语义，融合件用 store.c 故另形）
+dup evocore/project.py:81                  # _overrides/project_overrides：融合件 §7 与重装形态各一份（自包含纪律）
+dup evocore/project.py:88                  # _override_marks/override_marks：同上
+dup build/tests/test_override_channels.py:227  # 负向用例参数表逐形态显式列出（不抽 helper：三形态入口形状本就不同）
+# 同上各组的**滑动窗口第二格**（扫描器按 2 行窗口逐位起算，故同一段代码会出两个组；理由同上）
+dup evo-seat/evo_seat.py:523               # = 522 组的下一窗口（override 打印段）
+dup evo-seat/evo_seat.py:503               # = project.py:88 组的下一窗口（override_marks 回溯）
+dup evo-seat/evo_seat.py:507               # = kb.py:154 组（终裁计数的读侧打印）
+dup evo-seat/evo_seat.py:678               # = 677 组的下一窗口（argparse 参数声明）
+dup build/kb_template/tools/kb.py:165      # = 164 组的下一窗口（target_seq 在账校验）
+
+# ── S8-1 新增（20260923 W3d）：测试内逐用例显式重复（同 S1v2 已登记的「逐用例显式，不抽 helper」惯例）──
+dup build/tests/test_kb_cli_commands.py:136   # 对拍各用例头两行（取两侧 rows）重复 ×3 组：刻意不抽 helper，每个用例要能单独读懂与单跑
+
+# ── S8-6 / W3e 新增：三形态"同语义两抄本"族（融合件必须自包含 ⇒ 不能 import 共用件）──
+# 漂移防线：test_sources_view / test_kb_cli_commands / test_ops_governance 的跨形态对拍用例
+# （同输入两抄本必须同读数；两抄本各走各的 => 用例红，见 02-自检读数 §W3e 抓到的那次）
+dup evo-seat/evo_seat.py:495      # _overrides 与 evocore.project.project_overrides 两抄本
+dup evo-seat/evo_seat.py:502      # _override_marks 与 project.override_marks 两抄本
+dup evo-seat/evo_seat.py:566      # _source_stats 与 project.project_sources 两抄本（本批实测抓到两抄本分桶键漂移并修正）
+dup evo-seat/evo_seat.py:587      # audit 的终裁/来源读数打印段与中库、服务件同形
+dup evo-seat/evo_seat.py:710      # override 子命令 argparse 参数声明（三形态同形）
+dup build/l2server/server.py:574  # ops sources/audit 的占比与 kind 分布打印段（与中库 CLI 同形）
+# ── W5a 新增：测试件两行路径样板跨文件重复（ROOT=… + SRV_OUT=…）：与上面「夹具各持一份」同族 ──
+dup build/tests/test_ops_governance.py:25   # 两行路径样板（ROOT/SRV_OUT）与 L2 并发件同形；每个测试文件须独立可跑（本仓惯例），不抽公共件
+dup build/tests/test_ops_governance.py:49   # `_deploy()` 的「装配产物缺失即停」前置守卫两行与 L2 并发件同形：同上一条理由（各测试文件独立可跑，不抽公共件）
+# ── W4·第三方接收：tools/tests/test_code_quality_gate.py（质量门首个自测件，自 A 副本 R3 合入）──
+dup tools/tests/test_code_quality_gate.py:30  # 临时目录样板两行（TemporaryDirectory+m.py）在各用例重复：每用例独立可跑（本仓惯例），不抽公共件
+dup tools/tests/test_code_quality_gate.py:42  # 同上
+dup tools/tests/test_code_quality_gate.py:51  # 同上
+dup tools/tests/test_code_quality_gate.py:60  # 同上
+dup tools/tests/test_code_quality_gate.py:43  # 写件+跑门样板与上组相邻重复：同上一条理由（用例显式自足，不抽 helper）
+dup tools/tests/test_code_quality_gate.py:52  # 同上
+# ── P2·共库身份（B′）新增样板（20260924）──
+dup build/l2server/server.py:493   # _sign 与 cmd_revoke 的 caps.json 读入两行：一签一撤对称位，抽公共件反而糊掉语义
+dup build/l2server/server.py:498   # 同上（写回两行）
+dup build/tests/test_l2_concurrent_write.py:221  # C2 负向需"一服务器多身份客户端"，_Http 单客户端夹具不合形——启动样板保留
+dup build/tests/test_l2_concurrent_write.py:222  # 同上
+dup build/tests/test_l2_concurrent_write.py:223  # 同上
+dup build/tests/test_l2_concurrent_write.py:224  # 同上
+dup build/tests/test_ops_governance.py:28         # _run 助手与 demo_e2e 各一份：测试台惯例（各文件独立可跑）
+# ── P3·指纹统一（20260924）──
+dup evocore/entry.py:50   # 归一规则镜像组：evo_seat §1 自包含镜像逐行同构于唯一来源（自包含纪律=不 import 宿主包）——一致性由转正钉桩 test_content_hash_divergence 常驻盯防
+dup evocore/entry.py:51   # 同上
+dup evocore/entry.py:53   # 同上
+dup evocore/entry.py:54   # 同上
+dup evocore/entry.py:55   # 同上
+magic evo-seat/evo_seat.py:96    # 存量浮出（P3 首扫融合件全件）：busy_timeout=5000（W4 R1 事务化引入）·改动=动机制段须走版本闸·登记不修
+magic evo-seat/evo_seat.py:247   # 存量浮出：86400.0=一天秒数（衰减曲线日龄单位换算）
+magic evo-seat/evo_seat.py:266   # 存量浮出：200=内容截断长
+magic evo-seat/evo_seat.py:273   # 存量浮出：200=同族截断
+magic evo-seat/evo_seat.py:704   # 存量浮出：2026=演示/文档年份字面量（§7 cli）
+magic evo-seat/evo_seat.py:715   # 存量浮出：5000=busy_timeout 同族（§7 重复出现）
+magic evo-seat/evo_seat.py:452   # 存量浮出：120=扫描路径截断
+magic memsys/bridge.py:70        # 存量浮出：120=query 留痕截断长（与 server._QUERY_SNIPPET 同族）
+
+# ── P3 后重登记：三形态结构性重复族（S8-4 同族·行号因 P1-P3 改动位移·按当前行号重钉）──
+dup evo-seat/evo_seat.py:565   # 三形态结构重复组1（3件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:198   # 三形态结构重复组1（3件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:538   # 三形态结构重复组1（3件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:194   # 三形态结构重复组2（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:533   # 三形态结构重复组2（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:195   # 三形态结构重复组3（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:534   # 三形态结构重复组3（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:377   # 三形态结构重复组4（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:601   # 三形态结构重复组4（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:378   # 三形态结构重复组5（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:602   # 三形态结构重复组5（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:379   # 三形态结构重复组6（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/l2server/server.py:603   # 三形态结构重复组6（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:500   # 三形态结构重复组7（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:310   # 三形态结构重复组7（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:544   # 三形态结构重复组8（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:184   # 三形态结构重复组8（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:571   # 三形态结构重复组9（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:204   # 三形态结构重复组9（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:629   # 三形态结构重复组10（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:339   # 三形态结构重复组10（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:630   # 三形态结构重复组11（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:340   # 三形态结构重复组11（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:654   # 三形态结构重复组12（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:376   # 三形态结构重复组12（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:752   # 三形态结构重复组13（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:408   # 三形态结构重复组13（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup evo-seat/evo_seat.py:753   # 三形态结构重复组14（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）
+dup build/kb_template/tools/kb.py:409   # 三形态结构重复组14（2件同形）：同语义跨形态行·漂移防线=跨形态对拍常设（test_kb_cli_commands/test_ops_governance）

@@ -1,0 +1,16 @@
+# -*- coding: utf-8 -*-
+"""find_lit_files.txt — 在 files.jsonl 中搜文献类文件（按文件名关键词）"""
+import json, re
+
+pats = re.compile(r"(论文|文献|paper|lit|literature|综述|survey|引用|分级|ordering|框架|雷达|radar|sota|SOURCES|registry)", re.I)
+hits = []
+with open(r"workspace-audit/data/files.jsonl", encoding="utf-8", errors="surrogatepass") as f:
+    for line in f:
+        r = json.loads(line)
+        name = r["path"].split("/")[-1]
+        if r["ext"] in (".md", ".txt", ".csv", ".docx", ".pdf", ".html") and pats.search(name):
+            hits.append(r)
+
+for r in sorted(hits, key=lambda x: x["path"]):
+    print(f"{r['size']:>9,}  {r['path']}")
+print("---total", len(hits))

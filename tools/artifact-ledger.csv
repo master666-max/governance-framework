@@ -1,0 +1,4 @@
+﻿artifact_id,declaration,artifact_anchor_blob,artifact_anchor_wt,source_mapping,recipe,sampled_at,generation_binding,state
+8de8fb1f14d50f58,bootstrap v3.9 引擎现役发布包,8de8fb1f14d50f58@9971282,8de8fb1f14d50f58,library-bootstrap-v3.9/bootstrap_v3.9.py@9971282,sha256sum library-bootstrap-v3.9/bootstrap_v3.9.py,2026-09-20T12:37:28+08:00,v3.10件四五波,attested
+78a7c96344daeacd,混元 kernel v894,78a7c96344daeacd@f61d969,78a7c96344daeacd,混元/kernel主线/验收-v894/kernel.py@f61d969,sha256sum 混元/kernel主线/验收-v894/kernel.py,2026-09-20T12:37:28+08:00,v894 ROI整改批,attested
+fcedc033d2bf1e7c,审计账本十圈终态,fcedc033d2bf1e7c@审计区HEAD,fcedc033d2bf1e7c,claim_ledger.csv,sha256sum claim_ledger.csv,2026-09-20T12:37:28+08:00,第十圈基线前,attested

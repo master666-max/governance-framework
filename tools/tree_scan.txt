@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+"""tree_scan.txt — 阶段3 第一步：机械扫描
+1) 节点表：现行断言按 experiment_id 聚合（前缀=宇宙）
+2) 候选边A：跨宇宙同基编号（E14 出现在 SIM 与其他宇宙的断言中）
+3) 候选边B：断言引文含关系动词（复现/推翻/启发/前置/翻案/修正…）
+4) 悬空引用候选：引文中出现的实验号 token 无对应节点者
+输出 data/tree-nodes.csv + data/tree-candidates.csv + data/tree-ghost-candidates.csv
+"""
+import os, csv, re, collections
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+
+with open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig") as f:
+    rows = [r for r in csv.DictReader(f)]
+
+sup = set()
+with open(os.path.join(AUD, "supersede_log.csv"), encoding="utf-8-sig") as f:
+    for r in csv.DictReader(f):
+        sup.add(r["old_claim_id"])
+live = [r for r in rows if r["claim_id"] not in sup]
+print(f"现行断言 {len(live)}")
+
+# ---------- 1) 节点表 ----------
+nodes = collections.defaultdict(lambda: {"n": 0, "types": set(), "status": collections.Counter(), "files": set()})
+for r in live:
+    eid = r["experiment_id"]
+    nodes[eid]["n"] += 1
+    nodes[eid]["types"].add(r["claim_type"])
+    nodes[eid]["status"][r["status"]] += 1
+    nodes[eid]["files"].add(r["source_file"])
+
+def universe(eid):
+    return eid.split("-")[0]
+
+with open(os.path.join(AUD, "data", "tree-nodes.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["experiment_id", "universe", "claim_count", "claim_types", "status_mix", "source_files"])
+    for eid in sorted(nodes, key=lambda k: (universe(k), k)):
+        d = nodes[eid]
+        w.writerow([eid, universe(eid), d["n"], "|".join(sorted(d["types"])),
+                    "|".join(f"{k}:{v}" for k, v in d["status"].most_common()), len(d["files"])])
+print(f"节点（experiment_id 去重）{len(nodes)}，宇宙 {sorted(set(map(universe, nodes)))}")
+
+# ---------- 2) 候选边A：跨宇宙同基编号 ----------
+# 基编号：E##（SIM 系）为主；T#/R#-# 等跨宇宙撞名按全 token 对比
+E_PAT = re.compile(r"\bE(\d{1,3})\b")
+# REAL 的 X/G/W/H 系与 R2 的 T 系是本宇宙编号，跨宇宙引用通常写"E##"或全名
+crossA = collections.defaultdict(set)  # base_E -> set(universe)
+eid_base = {}  # experiment_id -> 其基编号（仅 E 系节点）
+for eid in nodes:
+    m = re.match(r"^(?:SIM|REAL|DS|VERIF|R2A?|PART2|DB|CB|GLM|QWEN|KB|PART1|L8LAB|DEPLOY|META|REVIEW|SYN|PLAN)-E(\d{1,3})", eid)
+    if m:
+        eid_base[eid] = int(m.group(1))
+        crossA[int(m.group(1))].add(universe(eid))
+# 引文中提及他宇宙 E 号：claim 的 universe != E 号所属宇宙
+mention = collections.defaultdict(lambda: collections.defaultdict(list))  # base -> uni -> [(eid, anchor)]
+for r in live:
+    own = universe(r["experiment_id"])
+    for m in E_PAT.finditer(r["verbatim_quote"]):
+        base = int(m.group(1))
+        mention[base][own].append((r["experiment_id"], r["location_anchor"], r["verbatim_quote"][:60]))
+
+candA = []
+for base in sorted(crossA):
+    us = crossA[base]
+    if len(us) > 1:
+        candA.append((f"E{base}", sorted(us)))
+# 引文跨宇宙提及（提及宇宙 != 所有者宇宙）
+for base in sorted(mention):
+    owners = crossA.get(base, set())
+    for u in mention[base]:
+        if owners and u not in owners:
+            candA.append((f"E{base}(提及@{u})", sorted(owners | {u})))
+
+# ---------- 3) 候选边B：关系动词 ----------
+VERBS = [
+    ("replicates", r"复现|重现"),
+    ("refutes", r"推翻|证伪|翻案|未复现|未能复现|打脸|不成立"),
+    ("motivated_by", r"启发|受.{0,6}驱动|源自|承接|交接|接手"),
+    ("extends", r"扩展|延伸|推广|进阶"),
+    ("supersedes", r"修正|改判|取代|更新为|撤回|回滚|supersede"),
+    ("contradicts", r"矛盾|冲突|相反|不一致|双口径"),
+    ("forked_from", r"分支|分叉|fork|另起|平行宇宙|移植"),
+]
+candB = []
+for r in live:
+    for rel, pat in VERBS:
+        if re.search(pat, r["verbatim_quote"]):
+            candB.append((r["experiment_id"], rel, r["location_anchor"], r["verbatim_quote"][:80]))
+            break
+
+with open(os.path.join(AUD, "data", "tree-candidates.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["kind", "from", "relation_or_universes", "anchor", "quote_or_note"])
+    for base, us in candA:
+        w.writerow(["A-同号跨宇宙", base, "|".join(us), "", f"节点归属:{'|'.join(us)}"])
+    for eid, rel, anc, q in candB:
+        w.writerow(["B-关系动词", eid, rel, anc, q])
+print(f"候选边A（跨宇宙同号/提及）{len(candA)}，候选边B（关系动词）{len(candB)}")
+
+# ---------- 4) 悬空引用候选 ----------
+# 引文中的 E 号 / H-R 号 / X 号，若无任何节点以该基号为主 id，则悬空
+HPAT = re.compile(r"\bH-R\d{1,2}-\d\b")
+XPAT = re.compile(r"\bX\d[a-c]?\b")
+tokens = collections.Counter()
+for r in live:
+    for m in E_PAT.finditer(r["verbatim_quote"]):
+        tokens[("E", int(m.group(1)))] += 1
+    for m in HPAT.finditer(r["verbatim_quote"]):
+        tokens[("H-R", m.group(0))] += 1
+node_bases = set(eid_base.values())
+ghosts = []
+for (kind, key), cnt in tokens.items():
+    if kind == "E" and key not in node_bases:
+        ghosts.append((f"E{key}", cnt, "E号被提及但无该号节点"))
+with open(os.path.join(AUD, "data", "tree-ghost-candidates.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["token", "mention_count", "reason"])
+    for t, c, why in sorted(ghosts, key=lambda x: -x[1]):
+        w.writerow([t, c, why])
+print(f"悬空引用候选 {len(ghosts)} 个 E 号")

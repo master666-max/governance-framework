@@ -1,0 +1,41 @@
+# -*- coding: utf-8 -*-
+"""build_participants.txt — 阶段1 生成 participants.csv（参与者表）"""
+import os, csv
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+OUT = os.path.join(AUD, "participants.csv")
+HEADER = ["participant", "ptype", "universes", "anchor", "note"]
+
+ROWS = [
+    ("混元", "AI-外部", "SIM", "库调试工作区/references/两轴模型与演化授权-v1.md:4", "26轮离线推演（125实验）执行者；产物在 大审查/混元/"),
+    ("豆包", "AI-外部", "DB-AGORA;DB-MEMEVO;引擎L9补丁", "大审查/衔尾蛇/README.md:29", "bootstrap_v3.8.2 被测源码提供方（ef2c645a）+L9补丁+两沙盒"),
+    ("DeepSeek", "AI-外部", "DS", "大审查/deepseek/对外完整版总报告_v3.0.0.md:3", "交接线独立复现（卷宗链v1.0.0→v3.0.0）"),
+    ("codebuddy", "AI-外部", "CB", "大审查/codebuddy/mem-evolve-sandbox_交接/docs/任务报告.md:1", "mem-evolve-sandbox 交接包（runs/ 含实测JSON）"),
+    ("GLM-网页端", "AI-外部", "GLM-WEB", "大审查/glm/v4.0-1.md:3", "v3.8/v3.10/v4.0 架构报告；非ZCode（glm/=网页端产物）"),
+    ("qwen", "AI-外部", "QWEN", "大审查/qwen/工单 v3.8.extract.txt:3（内容实为工单v3.9-1预备·文件名与内容版本错位，登记）", "工单线（v3.8/v3.10-AR/v4.0-RF docx+extract）"),
+    ("智谱清言", "AI-外部", "PART1", "knowledge/_index.md:73", "四轮外部审查链（审说明书→审核验→审工单→审修订令）"),
+    ("ZCode", "AI-会话端(本体)", "REAL;R2;PART2;VERIF", "大审查/衔尾蛇/README.md:6", "衔尾蛇真引擎六轮+第二批+PARTII循环+对抗验证"),
+    ("塞巴多拉贡", "人-用户", "裁决者", "大审查/衔尾蛇/自演化引擎沙盒实验规划书-v1.1.md:3", "三点裁决/实验档位裁决W-016/谱系核验质疑触发"),
+    ("Python 3.14.7", "工具-运行时", "全", "大审查/deepseek/对外完整版总报告_v3.0.0.md:7", "全部沙盒的运行时"),
+    ("py -X utf8 + Git Bash", "工具-环境纪律", "全", "大审查/衔尾蛇/自演化引擎沙盒实验规划书-v1.1.md:62", "P-001：python 已坏；.py 被 hook 拦→.txt"),
+    ("Windows 10 x64 10.0.26200", "环境", "REAL", "大审查/衔尾蛇/自演化引擎沙盒实验规划书-v1.1.md:62", "衔尾蛇报告口径"),
+    ("Windows 11", "环境", "VERIF", "猴子记忆库推演/README.md:9", "对抗验证报告口径（与上条并陈：同机异报法或异机，待确认）"),
+    ("git", "工具-版本控制", "VERIF;基线", "猴子记忆库推演/README.md:2", "原始工件 git 基线 c53c75a；本次考古根仓库 77fb1a0"),
+]
+
+existing = set()
+if os.path.exists(OUT):
+    with open(OUT, encoding="utf-8", newline="") as f:
+        for row in csv.reader(f):
+            if row:
+                existing.add(row[0])
+added = 0
+with open(OUT, "a", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    if not existing:
+        w.writerow(HEADER)
+    for r in ROWS:
+        if r[0] not in existing:
+            w.writerow(r)
+            added += 1
+print(f"participants.csv: 追加 {added} 条")

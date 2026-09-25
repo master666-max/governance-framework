@@ -1,0 +1,83 @@
+# -*- coding: utf-8 -*-
+"""extract_check.txt — 提取子代理自检：锚点逐字命中 + 长度 + 枚举校验
+用法：py -X utf8 tools/extract_check.txt data/extract/<batch>.jsonl
+全 PASS 才算完成；FAIL 行附原因，修完重跑。
+"""
+import os, sys, json
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+CLAIM_TYPES = {"hypothesis", "method", "result", "verdict", "parameter"}
+STATUS = {"verified", "refuted", "open", "contradicted", "superseded"}
+SRC = {"document", "dialogue"}
+
+src = sys.argv[1]
+path = src if os.path.isabs(src) else os.path.join(ROOT, "workspace-audit", src)
+lines_cache = {}
+
+ok = fail = 0
+fails = []
+n = 0
+with open(path, encoding="utf-8") as f:
+    for raw in f:
+        raw = raw.strip()
+        if not raw:
+            continue
+        n += 1
+        try:
+            r = json.loads(raw)
+        except json.JSONDecodeError as e:
+            fail += 1
+            fails.append((n, "JSON解析失败: " + str(e)[:60]))
+            continue
+        problems = []
+        for k in ("file", "line", "start_anchor", "end_anchor", "claim_type",
+                  "experiment_id", "status"):
+            if k not in r:
+                problems.append(f"缺字段{k}")
+        r.setdefault("source_type", "document")  # 与 ingest_extract 口径一致
+        if problems:
+            fail += 1
+            fails.append((n, "; ".join(problems)))
+            continue
+        if r["claim_type"] not in CLAIM_TYPES:
+            problems.append(f"claim_type非法:{r['claim_type']}")
+        if r["status"] not in STATUS:
+            problems.append(f"status非法:{r['status']}")
+        if r["source_type"] not in SRC:
+            problems.append(f"source_type非法:{r['source_type']}")
+        fp = os.path.join(ROOT, r["file"])
+        if not os.path.exists(fp):
+            problems.append("文件不存在:" + r["file"])
+        else:
+            if r["file"] not in lines_cache:
+                with open(fp, encoding="utf-8", errors="replace") as fh:
+                    lines_cache[r["file"]] = fh.readlines()
+            fl = lines_cache[r["file"]]
+            ln = r["line"]
+            if not isinstance(ln, int) or ln < 1 or ln > len(fl):
+                problems.append(f"行号越界:{ln}(总{len(fl)}行)")
+            else:
+                text = fl[ln - 1].rstrip("\r\n")
+                i = text.find(r["start_anchor"])
+                if i < 0:
+                    problems.append(f"start_anchor未命中:{r['start_anchor'][:30]!r}")
+                else:
+                    j = text.find(r["end_anchor"], i + len(r["start_anchor"]))
+                    if j < 0:
+                        problems.append(f"end_anchor未命中:{r['end_anchor'][:30]!r}")
+                    else:
+                        q = text[i:j + len(r["end_anchor"])]
+                        if len(q) > 200:
+                            problems.append(f"摘录超长:{len(q)}>200")
+        if problems:
+            fail += 1
+            fails.append((n, f"{r.get('file')}:{r.get('line')} " + "; ".join(problems)))
+        else:
+            ok += 1
+
+print(f"{src}: 共 {n} 条，PASS {ok}，FAIL {fail}")
+for ln, msg in fails[:30]:
+    print(f"  FAIL@{ln}: {msg}")
+if len(fails) > 30:
+    print(f"  …另有 {len(fails)-30} 条 FAIL")
+sys.exit(0 if fail == 0 and n > 0 else 1)

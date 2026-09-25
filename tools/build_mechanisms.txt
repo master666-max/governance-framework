@@ -1,0 +1,81 @@
+# -*- coding: utf-8 -*-
+"""build_mechanisms.txt — 阶段1 生成 mechanism-registry.csv（机制清单）
+status ∈ active(活)/refuted(死)/unknown(存疑)。每条带首次出现锚点（已逐字验证）。
+追加式：按 mechanism_id 去重。后续阶段可扩充。"""
+import os, csv
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+OUT = os.path.join(AUD, "mechanism-registry.csv")
+HEADER = ["mechanism_id", "name", "status", "first_seen_universe", "first_seen_anchor", "evidence_note"]
+
+R = "猴子记忆库推演/自演化推演_实验总报告17轮后.md"
+T = "大审查/zcode/自演化实验总树与总报告-全轮次.md"
+D = "大审查/deepseek/对外完整版总报告_v3.0.0.md"
+
+ROWS = [
+    # ---- 活机制 ----
+    ("MECH-01", "两级门控（宽松准入+严格晋升）", "active", "SIM", f"{R}:305", "E7 决定性；REAL-X2a 复现（总树:42）；两轴模型 E2 档前提"),
+    ("MECH-02", "Pareto 档案", "active", "SIM", f"{R}:405", "E11/E16；REAL-X2c 方向复现（总树:46）"),
+    ("MECH-03", "锚定审计", "active", "SIM", f"{R}:463", "E14 检出 8/8@阈值0.90；REAL-X3 升 P0（总树:53-54）；DS 线同源反例（E81 0触发）→ 演化为'真值抽样'变体"),
+    ("MECH-04", "留出集轮换", "active", "SIM", f"{R}:205", "E31 未复现 E8 膨胀+E35 限定（需伪特征在场）"),
+    ("MECH-05", "廉价筛选只淘汰", "active", "SIM", f"{R}:431", "E13；红线7"),
+    ("MECH-06", "bootstrap 显著性判据", "active", "SIM", f"{R}:514", "E17 假阳 0.08 vs 固定 margin 0.42；红线15 下界>max(0,margin)"),
+    ("MECH-07", "停摆监控器", "active", "SIM", f"{R}:218", "E44 连续5代零采纳→margin减半救回+0.056"),
+    ("MECH-08", "平台期三态判别", "active", "SIM", f"{R}:416", "E12 36/36"),
+    ("MECH-09", "最大差异采样", "active", "SIM", f"{R}:194", "E20 n=40 τ=0.920"),
+    ("MECH-10", "锚定样本永不衰减", "active", "SIM", f"{R}:487", "E14c 修正护栏；红线17"),
+    ("MECH-11", "元层人侧签名", "active", "SIM", f"{R}:577", "架构方向性约束：系统无法修改评判自己的尺子"),
+    ("MECH-12", "事件溯源内核", "active", "SIM", f"{R}:129", "原型A；REAL-X4 四项全胜（总树:58）"),
+    ("MECH-13", "git 后端", "active", "SIM", f"{R}:138", "原型B 七项免费能力；GPG 签名=人类令牌"),
+    ("MECH-14", "能力式安全", "active", "SIM", f"{R}:152", "违反铁律的代码写不出来 vs 检测式三绕过"),
+    ("MECH-15", "实测重要度（importance 派生化）", "active", "SIM", f"{R}:671", "E32 +44%；REAL-X6c 冷启动失败（总树:74）→ v3.9 收敛为稀疏期保守默认【跨宇宙条件分歧】"),
+    ("MECH-16", "filter_zero 零命中过滤", "active", "SIM", f"{R}:272", "E1 自发现→REAL 双世界复现→W-1 真库否决默认值回撤（总树:84-86）——选项化"),
+    ("MECH-17", "极简集（审计+Pareto）", "active", "SIM", f"{R}:770", "E76 89% 收益"),
+    ("MECH-18", "真值抽样审计", "active", "DS", f"{D}:11", "DS 线：≤3 代检出回退（对同源锚定 0 触发的修正）"),
+    ("MECH-19", "假设级 τ 早警", "active", "DS", f"{D}:12", "DS D4"),
+    ("MECH-20", "gap 统计", "active", "DS", f"{D}:12", "DS D2"),
+    ("MECH-21", "多源分歧信号", "active", "DS", f"{D}:12", "DS D1——'不一致'是系统唯一可靠的自指信号"),
+    ("MECH-22", "伪特征自限定（定理候选）", "active", "REAL", f"{T}:70", "三振（X3/X3c/X6a）：检索域 Goodhart 被效用结构关闭"),
+    ("MECH-23", "重组算子参数稳定门", "active", "REAL", f"{T}:72", "X6b 过早重组被作废 2/8——时序依赖"),
+    ("MECH-24", "w_age 病灶（发现）", "active", "REAL", f"{T}:44", "真引擎 −0.1×原始 age_days；模拟世界 ÷100 掩盖；老库定时炸弹"),
+    ("MECH-25", "hardened doctor 截断检出", "active", "REAL", "大审查/zcode/progress.md:18", "T4-4 4/4 检出零误报（legacy 1/4）；A10 验证"),
+    ("MECH-26", "展示通道切除", "active", "SIM", "大审查/混元/bootstrap_自演化推演_第十八轮.md:3", "E81 自我美化；R2-T2-1 复现关闭悬案（progress:15）"),
+    ("MECH-27", "噪声×margin 相图", "active", "PART2", "大审查/lab-notebook.md:17", "R2 拟题→执行（R2:8.5% 假采纳实测）"),
+    ("MECH-28", "两阶段门控噪声版", "unknown", "PART2", "大审查/lab-notebook.md:47", "R8 拟题理论对齐（纯噪声过双独立门概率乘法）——判定待读 data-archive"),
+    # ---- 死机制（被证伪） ----
+    ("MECH-29", "判断样本近因加权", "refuted", "SIM", f"{R}:473", "E14c：'人真改主意'是药'人被塑造'是毒，数据形态不可分"),
+    ("MECH-30", "层次化归并", "refuted", "SIM", f"{R}:202", "E28 远差于平铺（0.12 vs 0.90）"),
+    ("MECH-31", "1/5 规则自适应步长", "refuted", "SIM", f"{R}:753", "E54 单向收缩饿死"),
+    ("MECH-32", "回滚", "refuted", "SIM", f"{R}:831", "E27 无效（+0.024 vs +0.022）"),
+    ("MECH-33", "简单恢复解冻", "refuted", "SIM", f"{R}:638", "E26 无效；有效者唯重锚/渐进升级"),
+    ("MECH-34", "跨库迁移", "refuted", "SIM", f"{R}:525", "E18 直接搬比从零差"),
+    ("MECH-35", "margin 自标定", "refuted", "SIM", f"{R}:217", "E43 高估 4×"),
+    ("MECH-36", "按成分拒绝", "refuted", "SIM", f"{R}:804", "E71 第12次改良失败"),
+    ("MECH-37", "剔除矛盾样本", "refuted", "SIM", f"{R}:225", "E51 需要时无效不需要时有害"),
+    ("MECH-38", "元参数开放演化", "refuted", "SIM", f"{R}:562", "E24 margin 被降到 −0.04；红线13"),
+    ("MECH-39", "逐参数独立调优", "refuted", "SIM", f"{R}:731", "E66 阶段5 −0.0268 有害"),
+    ("MECH-40", "权重上界", "refuted", "SIM", "大审查/混元/P0验证_展示权重爆炸.md:4", "E87 上界无效（E112 爆炸到 7-27 未拦）"),
+    # ---- 存疑（跨宇宙矛盾/未定） ----
+    ("MECH-41", "复合灾难护栏负交互", "unknown", "SIM", f"{R}:789", "E80 成立（−0.26 vs −0.11）vs REAL-X3c 未复现（总树:62）——CONTRADICTION-CANDIDATE"),
+    ("MECH-42", "相关噪声击穿双门", "unknown", "SIM", f"{R}:231", "E57 决定性 vs REAL 构造强度不足未复现（总树:56）"),
+    ("MECH-43", "欺骗地形戏剧性分离", "unknown", "SIM", f"{R}:309", "E7 决定性 vs REAL-X3b 真引擎仅浅谷 7/8 自愈（总树:57）——已降级为兜底险"),
+    ("MECH-44", "记忆×法层共演化", "unknown", "SIM", f"{R}:230", "E56 收敛不震荡（中强度）"),
+    ("MECH-45", "良性环境护栏增益", "active", "SIM", f"{R}:779", "E77 +35%；R2-T3-1 部分翻案：代价符号随世界结构翻转（progress:17）"),
+]
+
+existing = set()
+if os.path.exists(OUT):
+    with open(OUT, encoding="utf-8", newline="") as f:
+        for row in csv.reader(f):
+            if row:
+                existing.add(row[0])
+added = 0
+with open(OUT, "a", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    if not existing:
+        w.writerow(HEADER)
+    for r in ROWS:
+        if r[0] not in existing:
+            w.writerow(r)
+            added += 1
+print(f"mechanism-registry.csv: 追加 {added} 条（总 {len(existing)+added}）")

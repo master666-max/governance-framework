@@ -1,0 +1,179 @@
+# -*- coding: utf-8 -*-
+"""phase5_zones.txt — 阶段5 景观五区分类脚本（规则=tools/phase5-guide.md v1 冻结版）
+输出：data/phase5-zone-assignments.csv / data/phase5-death-causes.csv /
+     data/phase5-frontier-ranked.csv / stdout summary（重定向到 data/phase5-summary.txt）
+校验：人口基数 3871 且四区之和=人口，不平 exit 1。
+"""
+import csv, io, sys, collections, math
+
+BASE = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD  = BASE + r"\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+claims = read_csv(AUD + r"\claim_ledger.csv")
+edges  = read_csv(AUD + r"\tree_edges.csv")
+nodes  = read_csv(AUD + r"\data\tree-nodes.csv")
+slog   = read_csv(AUD + r"\supersede_log.csv")
+
+superseded_ids = set(r["old_claim_id"] for r in slog)
+P = [c for c in claims if c["status"] != "superseded" and c["claim_id"] not in superseded_ids]
+
+# ---- §一 基数硬校验 ----
+EXPECT = {"verified": 3093, "open": 702, "refuted": 52, "contradicted": 24}
+by_status = collections.Counter(c["status"] for c in P)
+ok = len(P) == 3871 and all(by_status.get(k, 0) == v for k, v in EXPECT.items())
+if not ok:
+    print("FATAL: 基数校验失败 len(P)=%d by_status=%s 期望=%s" % (len(P), dict(by_status), EXPECT))
+    sys.exit(1)
+print("[校验] 人口 P=%d；四区 %s —— PASS" % (len(P), dict(by_status)))
+
+# ---- §三 tier 计算 ----
+uni = {n["experiment_id"]: n["universe"] for n in nodes}
+CONF = ("replicates", "extends")
+incoming = collections.defaultdict(list)   # to_id -> [(from_id, relation)]
+incident = collections.defaultdict(int)    # id -> 关联边数
+universe_level_edges = []                  # 宇宙级端点边（to_id 不在 nodes）
+for e in edges:
+    incident[e["from_id"]] += 1
+    incident[e["to_id"]] += 1
+    if e["relation"] in CONF:
+        if e["to_id"] in uni:
+            incoming[e["to_id"]].append((e["from_id"], e["relation"]))
+        else:
+            universe_level_edges.append(e)
+
+def tier_of(exp):
+    ins = incoming.get(exp, [])
+    if not ins:
+        return 0
+    us = uni.get(exp)
+    for f, _ in ins:
+        if uni.get(f) and us and uni[f] != us:
+            return 1
+    return 2
+
+tiers = {n: tier_of(n) for n in uni}
+
+# ---- §五 死因关键词表（v2：guide §九 追加块同步） ----
+DEATH = [
+    ("DC-1", "换构造/换引擎未复现", ["未复现", "未在本", "未在真实", "复现失败", "未触发", "直接复现失败", "冷启动失败", "真实库冷启动"]),
+    ("DC-2", "人工构造/地形产物",   ["人工地形", "构造所污染", "构造不成立", "目标函数构造", "不可直接采信"]),
+    ("DC-3", "预注册判据/阈值失误", ["按预注册口径证伪", "阈值先验错", "判据 a（", "判据 b（", "强形式失败", "不能作为 cap 的证据", "REFUTED"]),
+    ("DC-4", "结构前提不成立",      ["结构上不可能", "结构性不可达", "结构性平坦", "被结构关闭", "固定成本", "被否决"]),
+    ("DC-5", "工件实现缺陷",        ["语法检查", "双反斜杠", "P0 阻断"]),
+    ("DC-6", "工程杠杆错位",        ["93% 代码不在解真正的题"]),
+    ("DC-7", "机制零效应/无效",     ["与预期相反", "完全无效", "几乎无差", "无收益", "该形态阴性", "未确认超线性", "全败"]),
+]
+def death_of(quote):
+    for code, name, kws in DEATH:
+        for kw in kws:
+            if kw in quote:
+                return code, name, kw
+    return "DC-0", "未归类", ""
+
+# ---- §六 区间 ----
+def interval(c):
+    return (math.floor(c * 0.795), math.ceil(c * 1.358))
+
+# ---- 分类主循环 ----
+zone_rows, death_rows, frontier = [], [], []
+for c in P:
+    exp = c["experiment_id"]
+    z = {"verified": "收敛区", "open": "开放前线", "refuted": "坟场", "contradicted": "矛盾区"}[c["status"]]
+    row = {"claim_id": c["claim_id"], "experiment_id": exp, "zone": z,
+           "tier": tiers.get(exp, 0), "iv": incident.get(exp, 0)}
+    zone_rows.append(row)
+    if c["status"] == "refuted":
+        code, name, kw = death_of(c["verbatim_quote"])
+        death_rows.append({"claim_id": c["claim_id"], "experiment_id": exp,
+                           "death_cause": code + " " + name, "matched_keyword": kw,
+                           "quote_head": c["verbatim_quote"][:60].replace("\n", " ")})
+    if c["status"] == "open" and c["claim_type"] == "hypothesis":
+        frontier.append({"claim_id": c["claim_id"], "experiment_id": exp,
+                         "iv": incident.get(exp, 0),
+                         "exp_open_hyp_count": 0,  # 填充见下
+                         "quote_head": c["verbatim_quote"][:70].replace("\n", " ")})
+
+exp_open_hyp = collections.Counter(r["experiment_id"] for r in frontier)
+for r in frontier:
+    r["exp_open_hyp_count"] = exp_open_hyp[r["experiment_id"]]
+frontier.sort(key=lambda r: (-r["iv"], -r["exp_open_hyp_count"], r["claim_id"]))
+
+# ---- 落盘 ----
+def dump(path, rows, fields):
+    with io.open(path, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+dump(AUD + r"\data\phase5-zone-assignments.csv", zone_rows,
+     ["claim_id", "experiment_id", "zone", "tier", "iv"])
+dump(AUD + r"\data\phase5-death-causes.csv", death_rows,
+     ["claim_id", "experiment_id", "death_cause", "matched_keyword", "quote_head"])
+dump(AUD + r"\data\phase5-frontier-ranked.csv", frontier,
+     ["claim_id", "experiment_id", "iv", "exp_open_hyp_count", "quote_head"])
+
+# ---- summary ----
+print()
+print("== 五区计数（点值 + 区间 [floor(C×0.795), ceil(C×1.358)]）==")
+for z in ["收敛区", "开放前线", "坟场", "矛盾区"]:
+    c = sum(1 for r in zone_rows if r["zone"] == z)
+    lo, hi = interval(c)
+    print("  %s: %d  [%d, %d]" % (z, c, lo, hi))
+print("  幽灵区: %d 条 ghost_list（全量枚举，不乘因子）" % (len(read_csv(AUD + r"\ghost_list.csv"))))
+
+print()
+print("== 收敛区 tier 分布（断言数）==")
+for t, name in [(1, "tier-1 跨宇宙确认"), (2, "tier-2 同宇宙复现"), (0, "tier-0 无入边确认")]:
+    c = sum(1 for r in zone_rows if r["zone"] == "收敛区" and r["tier"] == t)
+    lo, hi = interval(c)
+    print("  %s: %d  [%d, %d]" % (name, c, lo, hi))
+print("  tier-1 实验清单（按入边数降序）:")
+t1exps = collections.Counter()
+for e in edges:
+    if e["relation"] in CONF and e["to_id"] in uni and uni.get(e["from_id"]) and uni[e["from_id"]] != uni[e["to_id"]]:
+        t1exps[e["to_id"]] += 1
+for k, v in t1exps.most_common():
+    print("    %s (%s): %d 条跨宇宙确认入边" % (k, uni.get(k, "?"), v))
+print("  宇宙级整体复现边（不计入实验 tier）: %d 条" % len(universe_level_edges))
+for e in universe_level_edges:
+    print("    %s -> %s (%s)" % (e["from_id"], e["to_id"], e["relation"]))
+
+print()
+print("== 开放前线构成 ==")
+obt = collections.Counter(c["claim_type"] for c in P if c["status"] == "open")
+for k, v in obt.most_common():
+    lo, hi = interval(v)
+    print("  open×%s: %d  [%d, %d]" % (k, v, lo, hi))
+print("  hypothesis Top-30 by IV:")
+for r in frontier[:30]:
+    print("    IV=%-2d %s | %s | %s" % (r["iv"], r["experiment_id"], r["exp_open_hyp_count"], r["quote_head"][:52]))
+
+print()
+print("== 坟场死因分布 ==")
+ddc = collections.Counter(r["death_cause"] for r in death_rows)
+for k, v in ddc.most_common():
+    lo, hi = interval(v)
+    print("  %s: %d  [%d, %d]" % (k, v, lo, hi))
+uncov = sum(1 for r in death_rows if r["death_cause"].startswith("DC-0"))
+print("  关键词表覆盖率: %d/%d (%.1f%%)" % (len(death_rows) - uncov, len(death_rows),
+      100.0 * (len(death_rows) - uncov) / max(1, len(death_rows))))
+# DC-0 × claim_type 交叉（结构性局限呈现：hypothesis 行引文=假设原文）
+ref_type = {c["claim_id"]: c["claim_type"] for c in P if c["status"] == "refuted"}
+dc0_type = collections.Counter(ref_type[r["claim_id"]] for r in death_rows if r["death_cause"].startswith("DC-0"))
+print("  DC-0 × claim_type:", dict(dc0_type))
+
+print()
+print("== 矛盾区三口径并陈 ==")
+cc = sum(1 for r in zone_rows if r["zone"] == "矛盾区")
+lo, hi = interval(cc)
+print("  status=contradicted 断言: %d  [%d, %d]" % (cc, lo, hi))
+print("  tree_edges contradicts 边: %d（全量枚举）" % sum(1 for e in edges if e["relation"] == "contradicts"))
+print("  mechanism-registry CONTRADICTION-CANDIDATE: %d（全量枚举）" %
+      sum(1 for m in read_csv(AUD + r"\mechanism-registry.csv") if "CONTRADICTION-CANDIDATE" in m.get("evidence_note", "")))
+
+print()
+print("[落盘] zone-assignments=%d death-causes=%d frontier-ranked=%d" % (len(zone_rows), len(death_rows), len(frontier)))

@@ -1,0 +1,28 @@
+# -*- coding: utf-8 -*-
+"""touchstone2_fix.txt — 试金石#2 修正：2 条手抄错误行的 supersede 处理
+错误1: :180 摘录手抄加了原文没有的粗体星号 → 程序化截取重入，旧行 supersede
+错误2: :182 行号偏移（E8 行实际在 :181）→ 同上"""
+import os, csv
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ns = {}
+exec(compile(open(os.path.join(AUD, "tools", "ledger_tool.txt"), encoding="utf-8").read(), "ledger_tool", "exec"), ns)
+ledger_add_extract, supersede = ns["ledger_add_extract"], ns["supersede"]
+
+SRC = "猴子记忆库推演/自演化推演_实验总报告17轮后.md"
+
+def full_cid(prefix16):
+    with open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            if row["claim_id"].startswith(prefix16):
+                return row["claim_id"]
+    raise KeyError(prefix16)
+
+cid180, r1 = ledger_add_extract(SRC, 180, "| 7 |", "| **决定性** |", "result", "SIM-E7", "document", "open")
+print(r1, cid180[:16], ":180")
+cid181, r2 = ledger_add_extract(SRC, 181, "| 8 |", "3.7×） | 强 |", "result", "SIM-E8", "document", "contradicted")
+print(r2, cid181[:16], ":181")
+
+supersede(full_cid("06f1b13ecc5ed2fd"), cid180, "手抄错误：摘录含原文没有的粗体星号；程序化截取版取代")
+supersede(full_cid("c9ff0ac9be75a9bf"), cid181, "行号偏移+粗体：E8 行实际在181行；程序化截取版取代")
+print("superseded 2 rows")

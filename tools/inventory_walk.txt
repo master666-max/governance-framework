@@ -1,0 +1,60 @@
+# -*- coding: utf-8 -*-
+"""inventory_walk.txt — 阶段0 全树盘点脚本
+Walk 整个工作区（排除 workspace-audit/ 与 .git/），对每个文件计算
+sha256，输出 data/files.jsonl（逐行 JSON：path/size/mtime/sha256/ext）。
+只读扫描，不修改任何原文件。用法：py -X utf8 tools/inventory_walk.txt
+"""
+import os, sys, json, hashlib, datetime
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+OUT_DIR = os.path.join(ROOT, "workspace-audit", "data")
+EXCLUDE_DIRS = {"workspace-audit", ".git"}
+
+os.makedirs(OUT_DIR, exist_ok=True)
+out_path = os.path.join(OUT_DIR, "files.jsonl")
+
+def sha256_file(p, bufsize=1024 * 1024):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        while True:
+            b = f.read(bufsize)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+n_files = 0
+n_bytes = 0
+errors = []
+t0 = datetime.datetime.now()
+
+with open(out_path, "w", encoding="utf-8", errors="surrogatepass") as out:
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+        for fn in filenames:
+            fp = os.path.join(dirpath, fn)
+            rel = os.path.relpath(fp, ROOT).replace("\\", "/")
+            try:
+                st = os.stat(fp)
+                digest = sha256_file(fp)
+                rec = {
+                    "path": rel,
+                    "size": st.st_size,
+                    "mtime": datetime.datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+                    "sha256": digest,
+                    "ext": os.path.splitext(fn)[1].lower(),
+                }
+                out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                n_files += 1
+                n_bytes += st.st_size
+            except OSError as e:
+                errors.append((rel, str(e)))
+
+if errors:
+    with open(os.path.join(OUT_DIR, "walk_errors.txt"), "w", encoding="utf-8") as ef:
+        for rel, msg in errors:
+            ef.write(f"{rel}\t{msg}\n")
+
+dt = (datetime.datetime.now() - t0).total_seconds()
+print(f"files={n_files} bytes={n_bytes} ({n_bytes/1024/1024:.1f} MiB) errors={len(errors)} seconds={dt:.1f}")
+print(f"output={out_path}")

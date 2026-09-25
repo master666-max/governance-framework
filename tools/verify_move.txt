@@ -1,0 +1,32 @@
+# -*- coding: utf-8 -*-
+"""verify_move.txt — 衔尾蛇副本并入后的哈希抽查（对照阶段0基线 files.jsonl）"""
+import json, hashlib, os, random
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+DEST = os.path.join(ROOT, "大审查", "衔尾蛇", "attic", "衔尾蛇副本-冻结快照-20260909")
+
+old = {}
+with open(os.path.join(ROOT, "workspace-audit", "data", "files.jsonl"), encoding="utf-8", errors="surrogatepass") as f:
+    for line in f:
+        r = json.loads(line)
+        if r["path"].startswith("衔尾蛇副本/"):
+            old[r["path"][len("衔尾蛇副本/"):]] = r["sha256"]
+print("基线内副本文件数:", len(old))
+
+random.seed(7)
+sample = random.sample(sorted(old), 8)
+bad = 0
+for p in sample:
+    h = hashlib.sha256()
+    fp = os.path.join(DEST, *p.split("/"))
+    try:
+        with open(fp, "rb") as fh:
+            for b in iter(lambda: fh.read(1 << 20), b""):
+                h.update(b)
+        ok = h.hexdigest() == old[p]
+    except OSError:
+        ok = False
+    if not ok:
+        bad += 1
+    print(("OK " if ok else "BAD"), p[:70])
+print(f"抽查 8，不一致 {bad}")

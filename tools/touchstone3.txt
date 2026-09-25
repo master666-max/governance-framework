@@ -1,0 +1,39 @@
+# -*- coding: utf-8 -*-
+"""touchstone3.txt — 试金石#3：规划书 v1 vs v1.1（多版本演化）
+验证：版本有效性规则（版本号最高者为有效版本，低版本标 superseded 并链向高版本）。
+入账顺序：先 v1.1（现行）拿 claim_id，再 v1（superseded_by 链向之）。
+全部经 ledger_add_extract 程序化截取。EXPERIMENT=REAL-PLAN（真引擎沙盒规划）。"""
+import os
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ns = {}
+exec(compile(open(os.path.join(AUD, "tools", "ledger_tool.txt"), encoding="utf-8").read(), "ledger_tool", "exec"), ns)
+ledger_add_extract = ns["ledger_add_extract"]
+
+V11 = "大审查/衔尾蛇/自演化引擎沙盒实验规划书-v1.1.md"
+V1 = "大审查/衔尾蛇/自演化引擎沙盒实验规划书-v1.md"
+EID = "REAL-PLAN"
+
+# ---- v1.1 现行断言 ----
+c1, _ = ledger_add_extract(V11, 49, "| **H1 有效性**", "不劣 |", "hypothesis", EID, "document", "open")
+c2, _ = ledger_add_extract(V11, 109, "### 4.1 对照组矩阵", "（G0–G6，七组）", "method", EID, "document", "open")
+c3, _ = ledger_add_extract(V11, 204, "~~复合灾难~~", "是否升级为正式实验，视观察数据与用户裁决 | E80 |", "method", EID, "document", "open")
+c4, _ = ledger_add_extract(V11, 8, "3. **复合灾难档转为观察态**", "（§5-X3 / §8.2）。", "method", EID, "document", "open")
+c5, _ = ledger_add_extract(V11, 12, "- 被测源码：", "（sha256 前 16 位 `ef2c645aea64fb9e`）", "parameter", EID, "document", "open")
+c6, _ = ledger_add_extract(V11, 103, "方案：`evocore.txt` 按源码逐行语义参数化重实现", "（100+ 查询）", "method", EID, "document", "open")
+c7, _ = ledger_add_extract(V11, 152, "7. **负对照**：", "（防\"两个实现都没起作用\"的假等价）。", "method", EID, "document", "open")
+c8, _ = ledger_add_extract(V11, 339, "**状态：v1.1 已按用户三点裁决定稿", "据此刻执行。**", "parameter", EID, "document", "open")
+
+# ---- v1 被取代断言（superseded_by → v1.1 对应断言）----
+ledger_add_extract(V1, 44, "| **H1 有效性**", "显著优于静态基线（G0） |", "hypothesis", EID, "document", "superseded", c1)
+ledger_add_extract(V1, 115, "### 4.1 对照组矩阵", "（G0–G5）", "method", EID, "document", "superseded", c2)
+ledger_add_extract(V1, 194, "| 复合灾难 |", "| E80 |", "method", EID, "document", "superseded", c3)
+ledger_add_extract(V1, 352, "**状态：规划完成，等待用户确认后开工。**", "③危险场景矩阵是否砍掉复合灾难档（机时最贵）。", "parameter", EID, "document", "superseded", c8)
+
+# ---- 幂等复跑 ----
+dup_ok = all([
+    ledger_add_extract(V11, 49, "| **H1 有效性**", "不劣 |", "hypothesis", EID, "document", "open")[1] == "duplicate",
+    ledger_add_extract(V1, 44, "| **H1 有效性**", "显著优于静态基线（G0） |", "hypothesis", EID, "document", "superseded", c1)[1] == "duplicate",
+])
+print("幂等性:", "PASS" if dup_ok else "FAIL")
+print("v1.1 H1 claim:", c1[:16], " v1 H1 superseded_by:", c1[:16])

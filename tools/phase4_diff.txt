@@ -1,0 +1,224 @@
+# -*- coding: utf-8 -*-
+"""phase4_diff.txt — 阶段4 独立校验 diff（口径预登记，先于运行固定）：
+A = 账本现行断言（source_file ∈ 盲建48文件集，含哈希孪生映射）
+B = 盲建断言（blind-sima/b/c）
+match(a,b) ⇔ 同文件(或孪生) ∧ 同 line ∧ 摘录字符重叠 ≥50%（交集/min长度）
+对账不一致率 = (|A 未匹配| + |A 匹配但 claim_type 或 status 冲突|) / |A|   ← 质量门指标
+盲建新增率 = |B 未匹配| / |B|                                            ← 仅报告
+experiment_id 差异不计入（两套命名约定均为合法操作定义产物，04-diff.md 说明）
+"""
+import os, csv, json, collections
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+ROOT = os.path.dirname(AUD)
+
+BLIND = ["blind-sima", "blind-simb", "blind-simc"]
+# 哈希孪生：盲建文件 → 账本实际记账路径（同内容不同路径；已逐一哈希核实）
+TWIN = {"大审查/混元/实验设计.md": "大审查/codebuddy/mem-evolve-sandbox_交接/docs/实验设计.md"}
+
+B = []
+for name in BLIND:
+    with open(os.path.join(AUD, "data", "extract", name + ".jsonl"), encoding="utf-8") as f:
+        for raw in f:
+            raw = raw.strip()
+            if raw:
+                r = json.loads(raw)
+                B.append(r)
+blind_files = {r["file"] for r in B}
+ref_files = {TWIN.get(f, f) for f in blind_files}
+
+def norm_quote(q):
+    return "".join(ch for ch in q if not ch.isspace())
+
+sup = {r["old_claim_id"] for r in csv.DictReader(open(os.path.join(AUD, "supersede_log.csv"), encoding="utf-8-sig"))}
+A = []
+for r in csv.DictReader(open(os.path.join(AUD, "claim_ledger.csv"), encoding="utf-8-sig")):
+    if r["claim_id"] in sup:
+        continue
+    if r["source_file"] in ref_files:
+        A.append(r)
+
+def overlap(q1, q2):
+    n1, n2 = norm_quote(q1), norm_quote(q2)
+    if not n1 or not n2:
+        return 0.0
+    c1, c2 = collections.Counter(n1), collections.Counter(n2)
+    inter = sum((c1 & c2).values())
+    return inter / min(len(n1), len(n2))
+
+# 贪心匹配（按重叠度降序，一线一配）
+pairs = []
+for i, a in enumerate(A):
+    for j, b in enumerate(B):
+        bf = TWIN.get(b["file"], b["file"])
+        if a["source_file"] != bf:
+            continue
+        la = int(a["location_anchor"].rsplit(":", 1)[1])
+        if la != b["line"]:
+            continue
+        ov = overlap(a["verbatim_quote"], b["start_anchor"])  # 占位，下一步用真实 quote
+        pairs.append((i, j, ov))
+# 用真实盲建 quote 重算（程序化截取）
+def blind_quote(b):
+    fp = os.path.join(ROOT, b["file"])
+    with open(fp, encoding="utf-8", errors="replace") as fh:
+        text = fh.readlines()[b["line"] - 1].rstrip("\r\n")
+    i = text.find(b["start_anchor"])
+    j = text.find(b["end_anchor"], i + len(b["start_anchor"]))
+    return text[i:j + len(b["end_anchor"])]
+
+bq_cache = {}
+pairs = []
+for i, a in enumerate(A):
+    for j, b in enumerate(B):
+        bf = TWIN.get(b["file"], b["file"])
+        if a["source_file"] != bf:
+            continue
+        la = int(a["location_anchor"].rsplit(":", 1)[1])
+        if la != b["line"]:
+            continue
+        if j not in bq_cache:
+            bq_cache[j] = norm_quote(blind_quote(b))
+        inter = sum((collections.Counter(norm_quote(a["verbatim_quote"])) & collections.Counter(bq_cache[j])).values())
+        ov = inter / min(len(norm_quote(a["verbatim_quote"])), len(bq_cache[j])) if bq_cache[j] else 0
+        if ov >= 0.5:
+            pairs.append((ov, i, j))
+pairs.sort(reverse=True)
+used_a, used_b, matched = set(), set(), []
+for ov, i, j in pairs:
+    if i in used_a or j in used_b:
+        continue
+    used_a.add(i); used_b.add(j)
+    matched.append((i, j, ov))
+
+type_diff = status_diff = both_diff = 0
+for i, j, ov in matched:
+    a, b = A[i], B[j]
+    td = a["claim_type"] != b["claim_type"]
+    sd = a["status"] != b["status"]
+    if td and sd:
+        both_diff += 1
+    elif td:
+        type_diff += 1
+    elif sd:
+        status_diff += 1
+
+A_un = len(A) - len(matched)
+B_un = len(B) - len(matched)
+rate = (A_un + type_diff + status_diff + both_diff) / len(A) * 100 if A else 0
+extra_rate = B_un / len(B) * 100 if B else 0
+
+print(f"A（账本·48文件集现行）= {len(A)}")
+print(f"B（盲建）= {len(B)}")
+print(f"匹配对 = {len(matched)}")
+print(f"A 未被复现 = {A_un}（占A {A_un/len(A)*100:.1f}%）")
+print(f"匹配但字段冲突 = {type_diff + status_diff + both_diff}（type {type_diff} / status {status_diff} / 双 {both_diff}）")
+print(f"对账不一致率 = {rate:.1f}%   ← 质量门（<10% 过 / 10-25% 回炉 / >25% HALT）")
+print(f"盲建新增率 = {extra_rate:.1f}%（信息性）")
+
+# 明细存档
+with open(os.path.join(AUD, "data", "phase4-diff-detail.csv"), "w", encoding="utf-8", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["kind", "ref_anchor", "ref_type", "ref_status", "blind_file_line", "blind_type", "blind_status", "ref_quote", "blind_quote"])
+    for i, j, ov in matched:
+        a, b = A[i], B[j]
+        if a["claim_type"] != b["claim_type"] or a["status"] != b["status"]:
+            w.writerow(["FIELD-DIFF", a["location_anchor"], a["claim_type"], a["status"],
+                        f"{b['file']}:{b['line']}", b["claim_type"], b["status"],
+                        a["verbatim_quote"][:60], bq_cache[j][:60]])
+    for i, a in enumerate(A):
+        if i not in used_a:
+            w.writerow(["A-UNMATCHED", a["location_anchor"], a["claim_type"], a["status"], "", "", "", a["verbatim_quote"][:60], ""])
+    for j, b in enumerate(B):
+        if j not in used_b:
+            if j not in bq_cache:
+                bq_cache[j] = norm_quote(blind_quote(b))
+            w.writerow(["B-EXTRA", "", "", "", f"{b['file']}:{b['line']}", b["claim_type"], b["status"], "", bq_cache[j][:60]])
+print("明细 → data/phase4-diff-detail.csv")
+
+# ---------- v2 包含度匹配（粒度不敏感）+ 未匹配分解（预登记补充口径） ----------
+# match_v2(a,b) ⇔ 同文件 ∧ 同行 ∧ 较短摘录的 ≥60% 字符包含于较长摘录（Counter 交集/短者长度）
+# v3 诊断口径：同文件 ∧ |行差|≤3 ∧ 包含度≥60% —— 区分"同断言不同锚行"与"未提取"
+def build_bq(b):
+    fp = os.path.join(ROOT, b["file"])
+    with open(fp, encoding="utf-8", errors="replace") as fh:
+        text = fh.readlines()[b["line"] - 1].rstrip("\r\n")
+    i = text.find(b["start_anchor"])
+    j = text.find(b["end_anchor"], i + len(b["start_anchor"]))
+    return norm_quote(text[i:j + len(b["end_anchor"])])
+
+for r in B:
+    pass
+bq_all = [norm_quote(blind_quote(b)) for b in B]
+b_line = [(TWIN.get(b["file"], b["file"]), b["line"]) for b in B]
+
+def best_match(i, window):
+    a = A[i]
+    la = int(a["location_anchor"].rsplit(":", 1)[1])
+    na = norm_quote(a["verbatim_quote"])
+    best = (0.0, None)
+    for j, (bf, ln) in enumerate(b_line):
+        if bf != a["source_file"] or abs(ln - la) > window:
+            continue
+        nb = bq_all[j]
+        if not na or not nb:
+            continue
+        inter = sum((collections.Counter(na) & collections.Counter(nb)).values())
+        contain = inter / min(len(na), len(nb))
+        if contain > best[0]:
+            best = (contain, j)
+    return best
+
+def run_v(window, contain_th):
+    pairs = []
+    used_a, used_b = set(), set()
+    for i in range(len(A)):
+        c, j = best_match(i, window)
+        if j is not None and c >= contain_th:
+            pairs.append((c, i, j))
+    pairs.sort(reverse=True)
+    for c, i, j in pairs:
+        used_a.add(i); used_b.add(j)
+    matched = [(i, j) for c, i, j in pairs]
+    fd = sum(1 for i, j in matched if A[i]["claim_type"] != B[j]["claim_type"] or A[i]["status"] != B[j]["status"])
+    A_un = len(A) - len(matched)
+    return matched, used_a, used_b, A_un, fd
+
+matched2, used_a2, used_b2, A_un2, fd2 = run_v(0, 0.6)
+print(f"\n[v2 同行包含≥60%] 匹配 {len(matched2)}；A未匹配 {A_un2}（{A_un2/len(A)*100:.1f}%）；字段冲突 {fd2}")
+print(f"[v2] 对账不一致率 = {(A_un2+fd2)/len(A)*100:.1f}%")
+matched3, used_a3, used_b3, A_un3, fd3 = run_v(3, 0.6)
+print(f"\n[v3 ±3行邻域包含≥60%·诊断口径] 匹配 {len(matched3)}；A未匹配 {A_un3}（{A_un3/len(A)*100:.1f}%）；字段冲突 {fd3}")
+print(f"[v3] 对账不一致率 = {(A_un3+fd3)/len(A)*100:.1f}%")
+jac = (len(A) + len(B) - 2 * len(matched3)) / (len(A) + len(B) - len(matched3))
+print(f"[v3] Jaccard 选择分歧率 = {jac*100:.1f}%（对称口径，信息性）")
+
+# v3 下的字段冲突分解
+t_d = s_d = b_d = 0
+for i, j in matched3:
+    td = A[i]["claim_type"] != B[j]["claim_type"]
+    sd = A[i]["status"] != B[j]["status"]
+    if td and sd: b_d += 1
+    elif td: t_d += 1
+    elif sd: s_d += 1
+print(f"[v3] 字段冲突分解：type {t_d} / status {s_d} / 双 {b_d}")
+
+# A未匹配分解（v3 口径后）：±3行有盲建（远粒度分歧） vs ±3行也无（真覆盖分歧）
+near = 0
+for i in range(len(A)):
+    if i in used_a3:
+        continue
+    c, j = best_match(i, 3)
+    if j is not None:
+        near += 1
+print(f"[分解] v3后A未匹配 {A_un3} 中：±3行内有盲建断言但包含<60%（粒度/选句分歧）{near}；±3行内盲建全无（真覆盖分歧）{A_un3-near}")
+
+# 按文件分解 A 未匹配
+un_by_file = collections.Counter()
+for i, a in enumerate(A):
+    if i not in used_a2:
+        un_by_file[a["source_file"]] += 1
+tot_by_file = collections.Counter(a["source_file"] for a in A)
+print("[按文件] A未匹配/总数 top10:")
+for f_, n in un_by_file.most_common(10):
+    print(f"   {f_}: {n}/{tot_by_file[f_]}")

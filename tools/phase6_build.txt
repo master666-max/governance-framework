@@ -1,0 +1,252 @@
+# -*- coding: utf-8 -*-
+"""phase6_build.txt — 阶段6 LIT-ABSORB 构建脚本（规则=tools/phase6-guide.md v1 冻结版）
+产出：lit-ledger.csv / ordering-claims.csv / ghost-papers.csv / data/phase6-build-log.txt
+assert 全过才落盘；任一失败 exit 1。摘录=行前200字符硬切，逐字 assert。"""
+import csv, io, sys, re, hashlib, collections
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+S1 = "引用论文总表.md"
+S2 = "library-bootstrap-v3.0/review-20260908/引用论文总表_修订版.md"
+S3 = "knowledge/references/sota-memory-radar.md"
+S4 = "库调试工作区/citations.md"
+S5 = "library-bootstrap-v3.0/review-20260908/论文实现核对报告.md"
+S6 = "库调试工作区/references/两轴模型与演化授权-v1.md"
+S7 = "knowledge/skills/library-bootstrap/SKILL.md"
+
+def lines_of(rel):
+    with io.open(ROOT + "\\" + rel, "r", encoding="utf-8-sig") as f:
+        return f.read().splitlines()
+
+L1, L2, L3, L4, L5, L6, L7 = (lines_of(p) for p in (S1, S2, S3, S4, S5, S6, S7))
+
+def sha(s):
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+def cut200(s):
+    return s[:200]
+
+PCT = re.compile(r"\d+(?:\.\d+)?%(?:\s*→\s*\d+(?:\.\d+)?%)?")
+XNUM = re.compile(r"\d+(?:\.\d+)?x")
+M35 = re.compile(r"3\.5M")
+def extnums(line):
+    hits = PCT.findall(line) + XNUM.findall(line) + M35.findall(line)
+    seen, out = set(), []
+    for h in hits:
+        if h not in seen:
+            seen.add(h); out.append(h)
+    return "；".join(out)
+
+MECH = {}
+for ids, m in [("A1 A14 A16 A18", "A派-分层记忆OS"), ("A12 A19 A27", "B派-管线抽取"),
+               ("A8 A9 A11 A15", "C派-图/联想检索"), ("A2 A3 A4 A5 A10 A23", "D派-认知架构/反思"),
+               ("A6 A13 A20", "E派-生物启发/遗忘/睡眠"), ("A17", "F派-长上下文压缩"),
+               ("A26 A28", "G派-产品实践"), ("A21 A22", "自进化/自指"),
+               ("A29 A30 A31 A32 A33", "认知科学经典"), ("A25", "上下文工程/技术报告"),
+               ("A7", "综述参照"), ("A24", "用户内部文档")]:
+    for i in ids.split():
+        MECH[i] = m
+
+RL = {"A17", "A19"}  # 需权重访问例外
+def tier_of(line):
+    m = re.search(r"`(T\d)[^`]*`", line)
+    return m.group(1) if m else None
+
+def test_of(tier, paper):
+    if paper in RL:
+        return "需权重访问"
+    if tier == "T1" or tier == "T2":
+        return "Y"
+    if tier == "T3":
+        return "N"
+    return ""
+
+lit_rows = []
+consumed = set()  # (filekey, lineno 1-based)
+
+def add(paper, batch, rel, ln, quote, row_type, mech, test, status=""):
+    assert quote in lines_of(rel)[ln - 1], "VERBATIM FAIL: %s:%d" % (rel, ln)
+    assert len(quote) <= 200
+    consumed.add((rel, ln))
+    lit_rows.append({"lit_id": sha(paper + rel + ":%d" % ln + quote[:80]),
+                     "paper_id": paper, "batch": batch, "source_file": rel,
+                     "anchor": "%s:%d" % (rel, ln), "verbatim_quote": quote,
+                     "row_type": row_type, "mechanism_type": mech,
+                     "testability": test, "external_claim_numbers": extnums(lines_of(rel)[ln - 1]),
+                     "status": status})
+
+# ---- S2: 33 纸 × (简介, 落地) ----
+cur = None
+s2_anchor = {}
+s2_tier = {}
+for i, ln in enumerate(L2, 1):
+    m = re.match(r"^### (A\d+) ", ln)
+    if m:
+        cur = m.group(1)
+        continue
+    if cur and ln.startswith("- **简介**："):
+        add(cur, "旧33", S2, i, cut200(ln), "简介", MECH[cur], "")
+        s2_anchor[cur] = "%s:%d" % (S2, i)
+    elif cur and ln.startswith("- **落地**："):
+        t = tier_of(ln)
+        s2_tier[cur] = t
+        add(cur, "旧33", S2, i, cut200(ln), "落地", MECH[cur], test_of(t, cur))
+assert len([r for r in lit_rows if r["source_file"] == S2]) == 66, "S2 != 66"
+
+# ---- S3: 21 雷达行 ----
+RADAR_MAP = {"MemGPT/Letta": "A1", "MemoryOS": "A14", "MemOS": "A16", "Mem0": "A12",
+             "Memory-R1": "A19", "MemInsight": "A27", "HippoRAG 1/2": "A8/A9",
+             "Zep/Graphiti": "A11", "G-Memory": "A15", "CoALA": "A4",
+             "Generative Agents": "A2", "A-MEM": "A10", "Reflexion": "A3",
+             "MemoryBank": "A6", "LightMem": "A20", "Sleep-time Compute": "A13",
+             "MemAgent": "A17", "Letta Memory Blocks": "A26", "OpenClaw": "A26",
+             "Anthropic memory tool": "RADAR-X1", "Manus 上下文工程": "A28"}
+SCHOOL = {"A.": "A派-分层记忆OS", "B.": "B派-管线抽取", "C.": "C派-图/联想检索",
+          "D.": "D派-认知架构/反思", "E.": "E派-生物启发/遗忘/睡眠",
+          "F.": "F派-长上下文压缩", "G.": "G派-产品实践"}
+school = None
+radar_anchor = {}
+for i, ln in enumerate(L3, 1):
+    m = re.match(r"^### ([A-G])\.", ln)
+    if m:
+        school = SCHOOL[m.group(1) + "."]
+        continue
+    if ln.startswith("|") and not ln.startswith("| 条目") and not ln.startswith("|---"):
+        cell0 = ln.split("|")[1].strip()
+        token = cell0.split(" (")[0].strip()
+        pid = RADAR_MAP.get(token)
+        assert pid, "radar token unmapped: %r @%d" % (token, i)
+        test = "Y" if "✅" in ln else ("N" if "⏸" in ln else "")
+        mech = school if pid != "RADAR-X1" else "G派-产品实践"
+        add(pid, "雷达综述", S3, i, cut200(ln), "雷达判定", mech, test)
+        radar_anchor[pid] = "%s:%d" % (S3, i)
+assert len([r for r in lit_rows if r["source_file"] == S3]) == 21, "S3 != 21"
+
+# ---- S4: 8 条自注 ----
+n4 = 0
+for i, ln in enumerate(L4, 1):
+    m = re.match(r"^- \*\*(A\d+)\*\*", ln)
+    if m and " — " in ln:
+        idx = ln.index(" — ")
+        quote = cut200(ln[idx + 3:])
+        add(m.group(1), "旧33", S4, i, quote, "题录自注", MECH[m.group(1)],
+            test_of(s2_tier.get(m.group(1)), m.group(1)))
+        n4 += 1
+assert n4 == 10, "S4 != 10"  # v2：实测自注 10 条（A31/A33 亦有注），guide §十登记
+
+# ---- S5: §一 4 + B1-B7 + 计数行 ----
+MARK5 = ["题录层质量高", "总表自身不完整", "实现层 33 条分布", "最严重的一条断裂"]
+for mk in MARK5:
+    hit = [i for i, ln in enumerate(L5, 1) if ln.startswith("- **") and mk in ln]
+    assert len(hit) == 1, "S5 marker dup/miss: %s" % mk
+    add("核对-总表", "旧33", S5, hit[0], cut200(L5[hit[0] - 1]), "核对结论", "题录核对", "")
+for i, ln in enumerate(L5, 1):
+    if re.match(r"^\| B\d+ ", ln):
+        add("核对-总表", "旧33", S5, i, cut200(ln), "核对问题", "题录核对", "")
+hit = [i for i, ln in enumerate(L5, 1) if ln.startswith("**计数**")]
+assert len(hit) == 1
+add("核对-总表", "旧33", S5, hit[0], cut200(L5[hit[0] - 1]), "核对结论", "题录核对", "",
+    status="superseded-by-patch（S2:11 v3.8.2/L9-DELIVER 后 A24/A29/A32/A33 改判）")
+assert len([r for r in lit_rows if r["source_file"] == S5]) == 12, "S5 != 12"
+
+# ---- S1: 名不副实七纸 原版用途行 ----
+FIX7 = ["A1", "A5", "A8", "A12", "A14", "A18", "A19"]
+cur = None
+for i, ln in enumerate(L1, 1):
+    m = re.match(r"^### (A\d+) ", ln)
+    if m:
+        cur = m.group(1)
+        continue
+    if cur in FIX7 and ln.startswith("- **库中用途**："):
+        add(cur, "旧33", S1, i, cut200(ln), "原版用途", MECH[cur], test_of(s2_tier.get(cur), cur))
+assert len([r for r in lit_rows if r["source_file"] == S1]) == 7, "S1 != 7"
+
+# ---- 丢弃计数（机械） ----
+nonempty = 0
+for rel, ls in ((S1, L1), (S2, L2), (S3, L3), (S4, L4), (S5, L5)):
+    nonempty += sum(1 for x in ls if x.strip())
+dropped = nonempty - len(consumed)
+
+# ---- ordering-claims.csv ----
+ord_rows = []
+def add_ord(rel, ln, otype, marker):
+    assert marker in lines_of(rel)[ln - 1], "ord marker fail %s:%d" % (rel, ln)
+    q = cut200(lines_of(rel)[ln - 1])
+    consumed_ord = sha(rel + ":%d" % ln + q[:80])
+    ord_rows.append({"claim_id": consumed_ord, "source_file": rel,
+                     "anchor": "%s:%d" % (rel, ln), "verbatim_quote": q, "ordering_type": otype})
+S6_LINES = [(14, "跨轴禁则", "两轴正交"), (20, "L↔E映射", "E0 禁演"), (21, "E链前提", "E1 受限"),
+            (22, "E链前提", "E2 受控"), (23, "E链前提", "E3 半自主"), (24, "E链前提", "E4 全栈"),
+            (26, "跨轴禁则", "通用红线")]
+for ln, t, mk in S6_LINES:
+    add_ord(S6, ln, t, mk)
+add_ord(S7, 3, "能力阶梯", "8 档预设")
+assert len(ord_rows) == 8
+
+# ---- ghost-papers.csv ----
+TYPE = {}
+for p in ["A1", "A5", "A6", "A7", "A8", "A12", "A14", "A16", "A18", "A19", "A20", "A21", "A22",
+          "A23", "A27", "A2", "A3", "A4", "A9", "A10", "A11", "A13", "A15", "A17"]:
+    TYPE[p] = "论文"
+for p in ["A29", "A30", "A31", "A32", "A33"]:
+    TYPE[p] = "经典文献"
+for p in ["A25", "A26", "A28"]:
+    TYPE[p] = "官方文档/技术报告"
+TYPE["A24"] = "用户内部文档"
+NAME = {}
+cur = None
+for ln in L2:
+    m = re.match(r"^### (A\d+) — (.+?)（", ln)
+    if m:
+        NAME[m.group(1)] = m.group(2)[:40]
+ghost_rows = []
+for k in sorted(TYPE, key=lambda x: int(x[1:])):
+    anchors = []
+    if k in s2_anchor:
+        anchors.append(s2_anchor[k])
+    if k in radar_anchor:
+        anchors.append(radar_anchor[k])
+    if k == "A24":
+        ghost_rows.append({"paper_id": k, "name_token": NAME.get(k, ""), "type": TYPE[k],
+                           "cited_in_anchors": ";".join(anchors),
+                           "fulltext_in_workspace": "Y(提取本)",
+                           "note": "attic/_bca_extract.txt 在位；原始 doc 形态未考"})
+    else:
+        ghost_rows.append({"paper_id": k, "name_token": NAME.get(k, ""), "type": TYPE[k],
+                           "cited_in_anchors": ";".join(anchors),
+                           "fulltext_in_workspace": "N", "note": ""})
+ghost_rows.append({"paper_id": "RADAR-X1", "name_token": "Anthropic memory tool",
+                   "type": "官方文档/技术报告", "cited_in_anchors": radar_anchor.get("RADAR-X1", ""),
+                   "fulltext_in_workspace": "N", "note": "雷达独有条目，不在33系统内"})
+assert len(ghost_rows) == 34
+
+# ---- 落盘 ----
+AUD = ROOT + r"\workspace-audit"
+def dump(p, rows, fields):
+    with io.open(p, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader(); w.writerows(rows)
+dump(AUD + r"\lit-ledger.csv", lit_rows,
+     ["lit_id", "paper_id", "batch", "source_file", "anchor", "verbatim_quote",
+      "row_type", "mechanism_type", "testability", "external_claim_numbers", "status"])
+dump(AUD + r"\ordering-claims.csv", ord_rows,
+     ["claim_id", "source_file", "anchor", "verbatim_quote", "ordering_type"])
+dump(AUD + r"\ghost-papers.csv", ghost_rows,
+     ["paper_id", "name_token", "type", "cited_in_anchors", "fulltext_in_workspace", "note"])
+
+# ---- build log ----
+bt = collections.Counter(r["row_type"] for r in lit_rows)
+bc = collections.Counter(r["batch"] for r in lit_rows)
+mc = collections.Counter(r["mechanism_type"] for r in lit_rows)
+tc = collections.Counter(r["testability"] for r in lit_rows)
+ec = sum(1 for r in lit_rows if r["external_claim_numbers"])
+log = ["lit-ledger rows: %d" % len(lit_rows),
+       "by row_type: %s" % dict(bt), "by batch: %s" % dict(bc),
+       "by mechanism_type: %s" % dict(mc), "by testability: %s" % dict(tc),
+       "rows with EXTERNAL-CLAIM numbers: %d" % ec,
+       "叙事丢弃行数（机械口径）: %d (非空行 %d − 命中行 %d)" % (dropped, nonempty, len(consumed)),
+       "ordering-claims rows: %d" % len(ord_rows),
+       "ghost-papers rows: %d (N=%d, Y提取本=1)" % (len(ghost_rows), len(ghost_rows) - 1),
+       "ALL ASSERTS PASS"]
+with io.open(AUD + r"\data\phase6-build-log.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(log) + "\n")
+print("\n".join(log))

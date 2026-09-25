@@ -1,0 +1,85 @@
+{
+  "aggregate_sha": "f76e559d873778229b3c249518d6d65808dedb07700942c5177739172654322a",
+  "conformance": [
+    {
+      "exit": 0,
+      "passed": 9,
+      "target": "<out>/server/kernel",
+      "total": 9,
+      "what": "conformance --kernel(server)"
+    },
+    {
+      "exit": 0,
+      "passed": 3,
+      "target": "<out>/server/evo",
+      "total": 3,
+      "what": "smoke evo(3 钉值)"
+    },
+    {
+      "exit": 0,
+      "passed": 9,
+      "target": "<out>/server",
+      "total": 9,
+      "what": "server selftest(八工具)"
+    }
+  ],
+  "files": {
+    "README.md": "bfd8b387a8b9e8a47c720b8a26d1bfd4911f0605546110b178387f14cc8634cb",
+    "caps.skeleton.json": "c15a0a33027e55ab30b80f758298c8d5c84f9d2975212362400054e6883ce51e",
+    "evo/evocore/__init__.py": "fe71bcc6f45ea3d1038c879120122ac36c268edef4d299b6ba9cd3671c215d17",
+    "evo/evocore/decision.py": "0ba4a11026c049a55bf1e14fdfa6c20075d72891a51828065d4c07fb329ed56e",
+    "evo/evocore/entry.py": "cff5c4e2d17062ccecf538e46b421d787a35b33930fc8c33ecb894abe59e5200",
+    "evo/evocore/lifecycle.py": "e13924cceff497e33143c9b37e77d6681f0077496c190d6b6cb791962c21e9b6",
+    "evo/evocore/project.py": "b0e9609909bd660f93bc4318dd9fb8056d7755ac35365524a59c34afd58ce545",
+    "evo/evocore/retrieval.py": "77870ebd816d1c44e3873fd853b4cc87aa27d6d15843e91b41e032dcc3d37072",
+    "evo/evocore/tunables.py": "f66e7189698a5255162745dce88f466db315d395e5e4fa27c04b6458428a8579",
+    "kernel/core/capabilities.py": "8ed6f5821ad7c1088bacb6364ec8e68d45c617e083af4115bec94074e477c2b9",
+    "kernel/core/gov_types.py": "f84eac4c2d0f74c189edcf1eebc9ed83a846c5949f85e8d481b6d765b8be079a",
+    "kernel/core/hashes.py": "b984140abf9a11b10b2b40ef068c523efed2e83c08660cd0f63b3e09ecaa3581",
+    "kernel/core/prereg.py": "4b9fe7892b1f3165cf7b5702bcbe533727fac6997c53c3d1913557194290712a",
+    "kernel/ledger/ledger.py": "101f4eef9dc1fe239cc17951dd5aedb932fef5ffe601789b075c3caf61584c74",
+    "kernel/ledger/schema.sql": "3a9b2ad81afe257539c48b667665ae3a842c66dd592661e527de049745c340c5",
+    "kinds.yml": "a65bf59fe97da8b5ddf9f4a6ff433dd4c0b57a8daa51b30af2fe6bf405366fc6",
+    "libs/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ops/conformance.sh": "32722de4f294f137fa201cde96c41d306b79ce319f3dc65bba964329b5e0120a",
+    "prereg/README.md": "e2131c24e629e502639ecd5afcc02d7ddc920b9d37c82ee242266d695d14fcea",
+    "prereg/判据-起步-v1.md": "b0a79a914fcd272f8073dea40104b73fa68b980039d6959b4b651547dc24c59d",
+    "quotas.skeleton.json": "c329c31dde4c066936be2a9cec4b249379c9edfa8cc5ec7ac21c9d7773880efb",
+    "server.py": "12ef2a44405527d2da499f993e91515de35f175fc6cff00bf5cb392eb80958d0"
+  },
+  "form": "server",
+  "schema_version": 1,
+  "sources": {
+    "README.md": "build/l2server/README.md",
+    "evo/evocore/__init__.py": "evocore/__init__.py",
+    "evo/evocore/decision.py": "evocore/decision.py",
+    "evo/evocore/entry.py": "evocore/entry.py",
+    "evo/evocore/lifecycle.py": "evocore/lifecycle.py",
+    "evo/evocore/project.py": "evocore/project.py",
+    "evo/evocore/retrieval.py": "evocore/retrieval.py",
+    "evo/evocore/tunables.py": "evocore/tunables.py",
+    "kernel/core/capabilities.py": "audit-kit/core/capabilities.py",
+    "kernel/core/gov_types.py": "audit-kit/core/gov_types.py",
+    "kernel/core/hashes.py": "audit-kit/core/hashes.py",
+    "kernel/core/prereg.py": "audit-kit/core/prereg.py",
+    "kernel/ledger/ledger.py": "audit-kit/ledger/ledger.py",
+    "kernel/ledger/schema.sql": "audit-kit/ledger/schema.sql",
+    "kinds.yml": "build/l2server/kinds.yml",
+    "prereg/README.md": "build/l2server/prereg/README.md",
+    "prereg/判据-起步-v1.md": "build/l2server/prereg/判据-起步-v1.md",
+    "server.py": "build/l2server/server.py"
+  },
+  "spec": "SPEC-内核接口与宿主契约-v1+v1.1增补-20260924",
+  "surface": [
+    "open",
+    "append",
+    "verify",
+    "count",
+    "head",
+    "rows"
+  ],
+  "versions": {
+    "audit-kit": "1.0.0",
+    "evocore": "0.5.0"
+  }
+}

@@ -1,0 +1,150 @@
+# -*- coding: utf-8 -*-
+"""phase9_status.txt — 阶段9 M 链审计机械计算（规则=tools/phase9-guide.md v1）
+产出：delta-baseline.csv + data/phase9-summary.txt
+"""
+import csv, io, hashlib, math, collections, re
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+def sha16(p):
+    h = hashlib.sha256()
+    with io.open(p, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()[:16]
+
+claims = read_csv(AUD + r"\claim_ledger.csv")
+edges = read_csv(AUD + r"\tree_edges.csv")
+mechs = read_csv(AUD + r"\mechanism-registry.csv")
+slog = read_csv(AUD + r"\supersede_log.csv")
+death = read_csv(AUD + r"\data\phase5-death-causes.csv")
+zones = read_csv(AUD + r"\data\phase5-zone-assignments.csv")
+frontier = read_csv(AUD + r"\data\phase5-frontier-ranked.csv")
+nodes = read_csv(AUD + r"\data\tree-nodes.csv")
+uni = {n["experiment_id"]: n["universe"] for n in nodes}
+sup_ids = set(r["old_claim_id"] for r in slog)
+cur = [c for c in claims if c["status"] != "superseded" and c["claim_id"] not in sup_ids]
+
+out = []
+base_rows = []
+
+# ---- §六 delta 基线：文件快照 ----
+FILES = ["claim_ledger.csv", "alias_map.csv", "tree_edges.csv", "lit-ledger.csv",
+         "incident-log.csv", "ordering-claims.csv", "ghost-papers.csv",
+         "mechanism-registry.csv", "lm-matrix.csv", "supersede_log.csv", "audit-log.csv"]
+for fn in FILES:
+    p = AUD + "\\" + fn
+    with io.open(p, encoding="utf-8-sig") as f:
+        n = sum(1 for _ in f)
+    base_rows.append({"item": fn, "kind": "ledger", "line_count": str(n),
+                      "value_or_sha": sha16(p), "note": ""})
+
+# ---- 五区计数（点值+区间） ----
+def interval(c):
+    return math.floor(c * 0.795), math.ceil(c * 1.358)
+P_total = len(cur)
+zc = collections.Counter(z["zone"] for z in zones)
+for z, zh in [("收敛区", "zone-verified"), ("开放前线", "zone-open"), ("坟场", "zone-refuted"), ("矛盾区", "zone-contradicted")]:
+    c = zc.get(z, 0)
+    lo, hi = interval(c)
+    base_rows.append({"item": "五区." + z, "kind": "derived", "line_count": "",
+                      "value_or_sha": "%d [%d,%d]" % (c, lo, hi), "note": zh})
+base_rows.append({"item": "五区.幽灵区", "kind": "derived", "line_count": "",
+                  "value_or_sha": "3（全量枚举）", "note": "ghost_list"})
+base_rows.append({"item": "人口P", "kind": "derived", "line_count": "",
+                  "value_or_sha": str(P_total), "note": "现行有效断言"})
+
+# ---- 边数口径区间 ----
+n_all = len(edges)
+n_factual = sum(1 for e in edges if e["INFERRED"] == "no")
+base_rows.append({"item": "边数", "kind": "derived", "line_count": "",
+                  "value_or_sha": "%d [口径区间 %d(实证),%d(全部)]" % (n_all, n_factual, n_all),
+                  "note": "INFERRED=%d" % (n_all - n_factual)})
+base_rows.append({"item": "open假设.IV=0", "kind": "derived", "line_count": "",
+                  "value_or_sha": str(sum(1 for r in frontier if r["iv"] == "0")), "note": "孤立前线"})
+
+# ---- §二 每圈重量趋势 ----
+out.append("== 新机制按 first_seen 宇宙 ==")
+fs = collections.Counter(m["first_seen_universe"] for m in mechs)
+out.append("  %s" % dict(fs.most_common()))
+out.append("")
+out.append("== 翻案/版本边（refutes+contradicts+supersedes）按 from 宇宙 ==")
+def uni_of(eid):
+    if eid in uni:
+        return uni[eid]
+    return eid.split("-")[0] if "-" in eid else eid
+rev = collections.Counter()
+allout_e = collections.Counter()
+for e in edges:
+    u = uni_of(e["from_id"])
+    allout_e[u] += 1
+    if e["relation"] in ("refutes", "contradicts", "supersedes"):
+        rev[u] += 1
+for u, v in sorted(allout_e.items(), key=lambda kv: -kv[1]):
+    out.append("  %-8s 出边%3d 其中翻案类%3d" % (u, v, rev.get(u, 0)))
+
+# ---- §三 三件套 ----
+PIECE = [("判据", re.compile(r"阈值|判据|门|margin|0\.85|0\.90|显著性|账本")),
+         ("边界", re.compile(r"边界|条件|限定|前提|需|仅|场景|依赖")),
+         ("失效", re.compile(r"失效|反例|未复现|翻案|红线|毒|失败|作废|0 触发|死区|漂移"))]
+dist = collections.Counter()
+full_list = []
+for m in mechs:
+    text = m["name"] + "｜" + m.get("evidence_note", "")
+    k = sum(1 for _, rx in PIECE if rx.search(text))
+    dist[k] += 1
+    if k == 3:
+        full_list.append(m["mechanism_id"])
+out.append("")
+out.append("== 三件套齐备度（语料=registry 行，局限已声明）==")
+out.append("  3件全齐: %d  2件: %d  1件: %d  0件: %d" % (dist[3], dist[2], dist[1], dist[0]))
+act = [m for m in mechs if m["status"] == "active"]
+act_full = sum(1 for m in act if sum(1 for _, rx in PIECE if rx.search(m["name"] + "｜" + m.get("evidence_note", ""))) == 3)
+out.append("  齐备率: 全45=%d/45 (%.1f%%)；active=%d/%d (%.1f%%)" %
+           (dist[3], 100.0 * dist[3] / 45, act_full, len(act), 100.0 * act_full / len(act)))
+out.append("  三件全齐清单: %s" % " ".join(full_list))
+
+# ---- §四 红队扑空率 ----
+REDTEAM = ("VERIF-", "REVIEW-")
+rt_out = [e for e in edges if e["from_id"].startswith(REDTEAM)]
+rt_ref = [e for e in rt_out if e["relation"] == "refutes"]
+out.append("")
+out.append("== 红队族（VERIF-*/REVIEW-*）出边 ==")
+out.append("  出边总数 %d；refutes %d；扑空率 = 1 − %d/%d = %.1f%%" %
+           (len(rt_out), len(rt_ref), len(rt_ref), len(rt_out),
+            100.0 * (1 - len(rt_ref) / max(1, len(rt_out)))))
+out.append("  relation 分布: %s" % dict(collections.Counter(e["relation"] for e in rt_out)))
+
+# ---- §四 机制稳定性 ----
+ref_sims = sorted(set(m["first_seen_universe"] for m in mechs if m["status"] == "refuted"))
+out.append("")
+out.append("== M0 退出判据 ==")
+out.append("  机制集: active %d/45；refuted 12 条 first_seen 宇宙=%s（post-SIM 机制证伪=0）" % (len(act), ref_sims))
+ddc_u = collections.Counter()
+for r in death:
+    ddc_u[r["experiment_id"].split("-")[0]] += 1
+out.append("  坟场 52 条按宇宙: %s" % dict(ddc_u.most_common()))
+
+# ---- §五 DATA-DRIVEN ----
+da = [c for c in cur if c["source_file"] == "大审查/data-archive.csv"]
+dd = [c for c in da if "DATA-DRIVEN" in c["verbatim_quote"]]
+lit = [c for c in da if "LIT-REPLICATE" in c["verbatim_quote"]]
+nar = [c for c in da if "NARRATIVE-DRIVEN" in c["verbatim_quote"]]
+out.append("")
+out.append("== DATA-DRIVEN 占比（data-archive 断言 %d 条）==" % len(da))
+out.append("  DATA-DRIVEN %d (%.1f%%) / LIT-REPLICATE %d / NARRATIVE-DRIVEN %d / 其他 %d" %
+           (len(dd), 100.0 * len(dd) / max(1, len(da)), len(lit), len(nar), len(da) - len(dd) - len(lit) - len(nar)))
+
+# ---- 落盘 ----
+with io.open(AUD + r"\delta-baseline.csv", "w", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["item", "kind", "line_count", "value_or_sha", "note"])
+    w.writeheader(); w.writerows(base_rows)
+out.append("")
+out.append("delta-baseline.csv 落盘 %d 行" % len(base_rows))
+print("\n".join(out))
+with io.open(AUD + r"\data\phase9-summary.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")

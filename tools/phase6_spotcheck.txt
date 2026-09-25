@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+"""phase6_spotcheck.txt — lit-ledger 尾数逢7抽检（独立重开原文核对），结果入 audit-log.csv"""
+import csv, io, hashlib, datetime
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+with io.open(AUD + r"\lit-ledger.csv", encoding="utf-8-sig", newline="") as f:
+    rows = list(csv.DictReader(f))
+
+picked = [r for r in rows if r["lit_id"].endswith("7")]
+print("抽检对象：尾数逢7 共 %d / %d 行" % (len(picked), len(rows)))
+
+cache = {}
+def get_lines(rel):
+    if rel not in cache:
+        with io.open(ROOT + "\\" + rel, encoding="utf-8-sig") as f:
+            cache[rel] = f.read().splitlines()
+    return cache[rel]
+
+now = datetime.datetime.now().isoformat(timespec="seconds")
+out = []
+n_hit = 0
+for r in picked:
+    rel, ln = r["anchor"].rsplit(":", 1)
+    ln = int(ln)
+    lines = get_lines(rel)
+    ok = ln <= len(lines) and r["verbatim_quote"] in lines[ln - 1]
+    n_hit += 1 if ok else 0
+    out.append({"claim_id": "P6:" + r["lit_id"][:40], "result": "命中" if ok else "未命中",
+                "reason": "%s row_type=%s" % (r["anchor"], r["row_type"]),
+                "checked_at": now, "phase": "6"})
+    print("  %s %s" % ("PASS" if ok else "FAIL", r["anchor"]))
+
+with io.open(AUD + r"\audit-log.csv", "a", encoding="utf-8", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=["claim_id", "result", "reason", "checked_at", "phase"])
+    w.writerows(out)
+print("命中率 %d/%d；已追加 audit-log %d 行" % (n_hit, len(picked), len(out)))

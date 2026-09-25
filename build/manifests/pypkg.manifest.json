@@ -1,0 +1,74 @@
+{
+  "aggregate_sha": "5929a30b7d89e0d88b2acdd46d421fa8622fc2af3c3f268482956dcae0ef441d",
+  "conformance": [
+    {
+      "exit": 0,
+      "passed": 9,
+      "target": "<out>/pypkg/audit-kit/auditkit/_payload",
+      "total": 9,
+      "what": "conformance --kernel(payload 平铺)"
+    },
+    {
+      "exit": 0,
+      "passed": 3,
+      "target": "<out>/pypkg/evocore",
+      "total": 3,
+      "what": "smoke evo(3 钉值)"
+    }
+  ],
+  "files": {
+    "audit-kit/README.md": "dba7bb3bddd7f2658b10a61d4b25cfdc274cb64b2d16351af1894e17956f2929",
+    "audit-kit/auditkit/__init__.py": "4181407d1fdf174ce400d67d74d62d734237c5eede90cf17432e37e4da725715",
+    "audit-kit/auditkit/_payload/capabilities.py": "8ed6f5821ad7c1088bacb6364ec8e68d45c617e083af4115bec94074e477c2b9",
+    "audit-kit/auditkit/_payload/gov_types.py": "f84eac4c2d0f74c189edcf1eebc9ed83a846c5949f85e8d481b6d765b8be079a",
+    "audit-kit/auditkit/_payload/hashes.py": "b984140abf9a11b10b2b40ef068c523efed2e83c08660cd0f63b3e09ecaa3581",
+    "audit-kit/auditkit/_payload/ledger.py": "101f4eef9dc1fe239cc17951dd5aedb932fef5ffe601789b075c3caf61584c74",
+    "audit-kit/auditkit/_payload/prereg.py": "4b9fe7892b1f3165cf7b5702bcbe533727fac6997c53c3d1913557194290712a",
+    "audit-kit/auditkit/_payload/schema.sql": "3a9b2ad81afe257539c48b667665ae3a842c66dd592661e527de049745c340c5",
+    "audit-kit/pyproject.toml": "c23a79cbee757dae9eeb8eb848e24d61e4c07dc76305725be5037e3c91fa4e09",
+    "evocore/README.md": "fbd2153800e88191081401f6268be7e27c2f837259320b63eb9151b3282512da",
+    "evocore/evocore/__init__.py": "fe71bcc6f45ea3d1038c879120122ac36c268edef4d299b6ba9cd3671c215d17",
+    "evocore/evocore/decision.py": "0ba4a11026c049a55bf1e14fdfa6c20075d72891a51828065d4c07fb329ed56e",
+    "evocore/evocore/entry.py": "cff5c4e2d17062ccecf538e46b421d787a35b33930fc8c33ecb894abe59e5200",
+    "evocore/evocore/lifecycle.py": "e13924cceff497e33143c9b37e77d6681f0077496c190d6b6cb791962c21e9b6",
+    "evocore/evocore/project.py": "b0e9609909bd660f93bc4318dd9fb8056d7755ac35365524a59c34afd58ce545",
+    "evocore/evocore/retrieval.py": "77870ebd816d1c44e3873fd853b4cc87aa27d6d15843e91b41e032dcc3d37072",
+    "evocore/evocore/tests/test_evocore.py": "67190d529f5ce02be9c9531520fed1b793836d3dfb956cfb2102b237734384b8",
+    "evocore/evocore/tests/test_evocore_contract.py": "32637e39e51c32b47509a7f03ed1be18b748f6ed5ea032e944a365d396c08dbd",
+    "evocore/evocore/tests/test_evocore_entry.py": "ee557a9239081c00ccb55ba295c02897de934dd546e8fa2005f5daa96be3d980",
+    "evocore/evocore/tests/test_evocore_matrix.py": "c7b2c38c547892cab4002011476cd4d9997c18e8eaeeb4ed1baa7c6b87bc5efd",
+    "evocore/evocore/tests/test_evocore_project.py": "b65b41a0b15faa0d2d272c37f3f928a6ae87b5488574f8b0dda6f3657f4f44b0",
+    "evocore/evocore/tests/test_evocore_s1.py": "e62cc8bc3734b4db16828e4296a1e54505fcb36ddebc044985d182ace3c1b8c2",
+    "evocore/evocore/tunables.py": "f66e7189698a5255162745dce88f466db315d395e5e4fa27c04b6458428a8579",
+    "evocore/pyproject.toml": "c9b1160790396a768d24f471270b7bd028e5be6a9d3fe8f790922f26a9cc695d"
+  },
+  "form": "pypkg",
+  "schema_version": 1,
+  "sources": {
+    "audit-kit/auditkit/_payload/capabilities.py": "audit-kit/core/capabilities.py",
+    "audit-kit/auditkit/_payload/gov_types.py": "audit-kit/core/gov_types.py",
+    "audit-kit/auditkit/_payload/hashes.py": "audit-kit/core/hashes.py",
+    "audit-kit/auditkit/_payload/ledger.py": "audit-kit/ledger/ledger.py",
+    "audit-kit/auditkit/_payload/prereg.py": "audit-kit/core/prereg.py",
+    "audit-kit/auditkit/_payload/schema.sql": "audit-kit/ledger/schema.sql",
+    "evocore/README.md": "evocore/README.md",
+    "evocore/evocore/__init__.py": "evocore/__init__.py",
+    "evocore/evocore/decision.py": "evocore/decision.py",
+    "evocore/evocore/entry.py": "evocore/entry.py",
+    "evocore/evocore/lifecycle.py": "evocore/lifecycle.py",
+    "evocore/evocore/project.py": "evocore/project.py",
+    "evocore/evocore/retrieval.py": "evocore/retrieval.py",
+    "evocore/evocore/tests/test_evocore.py": "evocore/tests/test_evocore.py",
+    "evocore/evocore/tests/test_evocore_contract.py": "evocore/tests/test_evocore_contract.py",
+    "evocore/evocore/tests/test_evocore_entry.py": "evocore/tests/test_evocore_entry.py",
+    "evocore/evocore/tests/test_evocore_matrix.py": "evocore/tests/test_evocore_matrix.py",
+    "evocore/evocore/tests/test_evocore_project.py": "evocore/tests/test_evocore_project.py",
+    "evocore/evocore/tests/test_evocore_s1.py": "evocore/tests/test_evocore_s1.py",
+    "evocore/evocore/tunables.py": "evocore/tunables.py"
+  },
+  "spec": "SPEC-内核接口与宿主契约-v1+v1.1增补-20260924",
+  "versions": {
+    "audit-kit": "1.0.0",
+    "evocore": "0.5.0"
+  }
+}

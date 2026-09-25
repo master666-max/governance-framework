@@ -1,0 +1,105 @@
+# -*- coding: utf-8 -*-
+"""ledger_tool.txt — claim_ledger.csv 写入器（阶段0.5/阶段2 主力工具）v2
+v2 变更（试金石修正）：
+  1. 新增 ledger_add_extract()：摘录从原文程序化截取（起止锚定位），杜绝手抄错误。
+     纪律：verbatim_quote 一律经此路径入账，禁止手抄整段。
+  2. 新增 supersede_log.csv：{old_claim_id, new_claim_id, reason, ts}，账本本体永不改写，
+     被 supersede 的行在验证/统计时经此表关联（R7）。
+claim_id = sha256(source_file + "|" + line + "|" + quote[:80])，幂等。
+verbatim_quote ≤200 字。
+"""
+import sys, os, csv, hashlib, datetime
+
+AUD = r"D:\zcode专用！！！！危险！！！！！！！！！\workspace-audit"
+LEDGER = os.path.join(AUD, "claim_ledger.csv")
+SUPERSEDE = os.path.join(AUD, "supersede_log.csv")
+HEADER = ["claim_id", "source_file", "location_anchor", "claim_type", "verbatim_quote",
+          "experiment_id", "source_type", "status", "superseded_by"]
+MAXQ = 200
+_line_cache = {}
+
+def make_claim_id(source_file, line, quote):
+    key = f"{source_file}|{line}|{quote[:80]}"
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+def load_existing_ids():
+    ids = set()
+    if os.path.exists(LEDGER):
+        with open(LEDGER, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                ids.add(row["claim_id"])
+    return ids
+
+def get_line(source_file, line_no):
+    if source_file not in _line_cache:
+        with open(os.path.join(os.path.dirname(AUD), source_file), encoding="utf-8", errors="replace") as f:
+            _line_cache[source_file] = f.readlines()
+    return _line_cache[source_file][line_no - 1].rstrip("\n")
+
+def ledger_add(source_file, line, quote, claim_type, experiment_id, source_type, status, superseded_by=""):
+    """幂等追加一条断言（quote 为已验证的原文摘录）。返回 (claim_id, 'added'|'duplicate')。"""
+    q = quote.replace("\n", "⏎")
+    if len(q) > MAXQ:
+        raise ValueError(f"摘录超长 {len(q)}>{MAXQ}：{q[:60]}…")
+    cid = make_claim_id(source_file, line, q)
+    if cid in load_existing_ids():
+        return cid, "duplicate"
+    new_file = not os.path.exists(LEDGER)
+    with open(LEDGER, "a", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        if new_file:
+            w.writerow(HEADER)
+        w.writerow([cid, source_file, f"{source_file}:{line}", claim_type, q,
+                    experiment_id, source_type, status, superseded_by])
+    return cid, "added"
+
+def ledger_add_extract(source_file, line, start_anchor, end_anchor, claim_type, experiment_id, source_type, status, superseded_by=""):
+    """程序化截取：在 source_file 第 line 行中定位 start_anchor..end_anchor（含端点），
+    截取为 verbatim_quote。起止锚不存在即抛错——结构上杜绝手抄偏差。"""
+    raw = get_line(source_file, line)
+    i = raw.find(start_anchor)
+    if i < 0:
+        raise ValueError(f"start_anchor 未命中 {source_file}:{line}: {start_anchor!r}")
+    j = raw.find(end_anchor, i + len(start_anchor))
+    if j < 0:
+        raise ValueError(f"end_anchor 未命中 {source_file}:{line}: {end_anchor!r}")
+    quote = raw[i:j + len(end_anchor)]
+    return ledger_add(source_file, line, quote, claim_type, experiment_id, source_type, status, superseded_by)
+
+def supersede(old_cid, new_cid, reason):
+    with open(SUPERSEDE, "a", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        if not os.path.exists(SUPERSEDE) or os.path.getsize(SUPERSEDE) == 0:
+            w.writerow(["old_claim_id", "new_claim_id", "reason", "ts"])
+        w.writerow([old_cid, new_cid, reason, datetime.datetime.now().isoformat(timespec="seconds")])
+
+def load_superseded():
+    out = {}
+    if os.path.exists(SUPERSEDE):
+        with open(SUPERSEDE, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                out[row["old_claim_id"]] = row["new_claim_id"]
+    return out
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "count"
+    if cmd == "count":
+        if not os.path.exists(LEDGER):
+            print("claim_ledger.csv 不存在，0 行")
+            return
+        sup = load_superseded()
+        with open(LEDGER, encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f))
+        live = [r for r in rows if r["claim_id"] not in sup]
+        print(f"总行数 {len(rows)}，被supersede {len(rows)-len(live)}，现行 {len(live)}")
+        by_type, by_status = {}, {}
+        for r in live:
+            by_type[r["claim_type"]] = by_type.get(r["claim_type"], 0) + 1
+            by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+        print("现行按类型:", dict(sorted(by_type.items())))
+        print("现行按状态:", dict(sorted(by_status.items())))
+    else:
+        print(__doc__)
+
+if __name__ == "__main__":
+    main()

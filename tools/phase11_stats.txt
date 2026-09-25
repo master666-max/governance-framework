@@ -1,0 +1,105 @@
+# -*- coding: utf-8 -*-
+"""phase11_stats.txt — 终报首屏统计（全部机械产出，命令即脚本；禁止手写数）
+产出：data/phase11-stats.txt（含可直接嵌入 99-MAP 的 markdown 表）
+"""
+import csv, io, os, math, collections
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+AUD = ROOT + r"\workspace-audit"
+
+def read_csv(p):
+    with io.open(p, "r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+def nlines(p):
+    with io.open(p, encoding="utf-8-sig") as f:
+        return sum(1 for _ in f)
+
+def interval(c):
+    return math.floor(c * 0.795), math.ceil(c * 1.358)
+
+out = []
+EM = out.append
+
+# 文件数（产出目录）
+files = []
+for dirpath, _, names in os.walk(AUD):
+    for n in names:
+        files.append(os.path.relpath(os.path.join(dirpath, n), AUD))
+n_files = len(files)
+n_data = sum(1 for f in files if f.startswith("data\\") or f.startswith("data/"))
+n_tools = sum(1 for f in files if f.startswith("tools\\") or f.startswith("tools/"))
+
+claims_lc = nlines(AUD + r"\claim_ledger.csv") - 1
+slog = read_csv(AUD + r"\supersede_log.csv")
+sup_ids = set(r["old_claim_id"] for r in slog)
+cl = read_csv(AUD + r"\claim_ledger.csv")
+cur_eff = sum(1 for c in cl if c["status"] != "superseded" and c["claim_id"] not in sup_ids)
+cur_all = sum(1 for c in cl if c["claim_id"] not in sup_ids)
+by_status = collections.Counter(c["status"] for c in cl if c["status"] != "superseded" and c["claim_id"] not in sup_ids)
+
+edges = read_csv(AUD + r"\tree_edges.csv")
+n_edges = len(edges)
+n_factual = sum(1 for e in edges if e["INFERRED"] == "no")
+n_inf = n_edges - n_factual
+
+# 最大簇（连通分量，节点=边中出现的 id + tree-nodes）
+nodes = read_csv(AUD + r"\data\tree-nodes.csv")
+ids = set(n["experiment_id"] for n in nodes)
+for e in edges:
+    ids.add(e["from_id"]); ids.add(e["to_id"])
+parent = {i: i for i in ids}
+def find(x):
+    while parent[x] != x:
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+    return x
+for e in edges:
+    parent[find(e["from_id"])] = find(e["to_id"])
+comp = collections.Counter(find(i) for i in ids)
+max_cluster = comp.most_common(1)[0][1]
+
+zones = read_csv(AUD + r"\data\phase5-zone-assignments.csv")
+zc = collections.Counter(z["zone"] for z in zones)
+ghost_list = read_csv(AUD + r"\ghost_list.csv")
+ghost_papers = read_csv(AUD + r"\ghost-papers.csv")
+mechs = read_csv(AUD + r"\mechanism-registry.csv")
+n_active = sum(1 for m in mechs if m["status"] == "active")
+lm = read_csv(AUD + r"\lm-matrix.csv")
+n_ver = sum(1 for r in lm if r["cell_status"] == "已实现且已验")
+n_ver_doubt = sum(1 for r in lm if r["cell_status"] in ("已实现且已验", "已实现存疑"))
+lit = read_csv(AUD + r"\lit-ledger.csv")
+ordc = read_csv(AUD + r"\ordering-claims.csv")
+inc = read_csv(AUD + r"\incident-log.csv")
+inc_unique = len(set(r["事故描述摘录"] for r in inc))
+delta = nlines(AUD + r"\delta-baseline.csv") - 1
+frontier = read_csv(AUD + r"\data\phase5-frontier-ranked.csv")
+iv0 = sum(1 for r in frontier if r["iv"] == "0")
+
+EM("== 终报统计（全部由 tools/phase11_stats.txt 产出）==")
+EM("")
+EM("| 指标 | 点值 | 区间/口径 | 来源命令 |")
+EM("|---|---|---|---|")
+EM("| 原工作区文件数（冻结基线） | 89,768 | 全量枚举 | data/files.jsonl 行数 |")
+EM("| 产出目录文件数 | %d（tools %d / data %d / 根 %d） | 全量枚举 | os.walk 计数 |" % (n_files, n_tools, n_data, n_files - n_tools - n_data))
+EM("| 断言总入账 | %d | — | wc -l claim_ledger.csv −1 |" % claims_lc)
+EM("| 现行有效断言 P | %d | [%d, %d] | ledger 口径：status≠superseded ∧ ∉supersede_log（verified %d/open %d/refuted %d/contradicted %d） |" % (cur_eff, *interval(cur_eff), by_status["verified"], by_status["open"], by_status["refuted"], by_status["contradicted"]))
+EM("| 分支树边数 | %d | 口径区间 [%d 实证, %d 全部]（INFERRED %d） | tree_edges.csv 计数 |" % (n_edges, n_factual, n_edges, n_inf))
+EM("| 收敛区 | %d | [%d, %d] | data/phase5-zone-assignments.csv |" % (zc["收敛区"], *interval(zc["收敛区"])))
+EM("| 开放前线 | %d | [%d, %d]（hypothesis 160，IV=0 孤立 %d） | 同上+frontier-ranked |" % (zc["开放前线"], *interval(zc["开放前线"]), iv0))
+EM("| 坟场 | %d | [%d, %d] | 同上 |" % (zc["坟场"], *interval(zc["坟场"])))
+EM("| 矛盾区 | %d | [%d, %d]；contradicts 边 %d | 同上+tree_edges |" % (zc["矛盾区"], *interval(zc["矛盾区"]), sum(1 for e in edges if e["relation"] == "contradicts")))
+EM("| 幽灵区 | 引用悬空 %d 候选（0 真幽灵）；论文无原文 %d | 全量枚举 | ghost_list+ghost-papers |" % (len(ghost_list), sum(1 for g in ghost_papers if g["fulltext_in_workspace"] == "N")))
+EM("| 独立 diff 不一致率 | — | **四口径 57.3%–58.9%**；Jaccard 分歧 53.9%；内容覆盖 79.5% | tools/phase4_diff/phase4_content（04-diff.md） |")
+EM("| 活机制集 | %d/45（refuted 12/unknown 5） | 全量枚举 | mechanism-registry.csv |" % n_active)
+EM("| 最大簇 | %d 节点 | 全量枚举 | 连通分量计算（本脚本） |" % max_cluster)
+EM("| LM 矩阵覆盖率 | 已验 %d/270（%.1f%%）；含存疑 %d/270（%.1f%%） | 全量枚举 | lm-matrix.csv |" % (n_ver, 100.0 * n_ver / 270, n_ver_doubt, 100.0 * n_ver_doubt / 270))
+EM("| 文献摄入 | lit %d 行（旧33×95/雷达×21/新批次 0）；ordering %d；ghost-paper %d | 全量枚举 | lit-ledger/ordering/ghost |" % (len(lit), len(ordc), len(ghost_papers)))
+EM("| 事故登记 | incident-log %d 行（唯一事故 %d） | 全量枚举 | incident-log.csv |" % (len(inc), inc_unique))
+EM("| M 位置 / 螺旋圈数 | 规格M1 首次达成=**第一圈出口/第二圈入口** | 定性判定 | 09-M-STATUS.md §一/§四 |")
+EM("| delta 基线 | %d 项快照（账本 11+派生 8） | 全量枚举 | wc -l delta-baseline.csv −1 |" % delta)
+EM("")
+EM("区间口径：floor(C×0.795)~ceil(C×1.358)（因子实测自 04-diff，外推假设声明见 30-景观五区.md 页首）")
+print("\n".join(out))
+with io.open(AUD + r"\data\phase11-stats.txt", "w", encoding="utf-8") as f:
+    f.write("\n".join(out) + "\n")

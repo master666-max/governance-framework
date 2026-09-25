@@ -1,0 +1,34 @@
+# memsys 领域 kind 注册（开放集，宿主侧）
+# 依据：架构书 v4.3 §十（框架自带 kind 见 audit-kit；本文件只注册记忆域 kind）
+version: 1
+kinds:
+  memory_adjudicate:
+    description: "冲突/合并/晋升三 intent 的 LLM 或规则判定"
+    actor_pattern: "llm:*|fallback:rule"
+    payload_schema: {intent: str, entries: [str], decision: str, rationale: str,
+                     evidence: [str], challenge_hint: str, severity_if_wrong: str}
+    authority_level: 3   # 挣得管辖（分级金标判据，见 prereg/金标判据-v1.md）
+  human_override:
+    description: "人工推翻机器判定（第四级放权：人侧保留）"
+    actor_pattern: "human:*"
+    authority_level: 4
+  promotion:
+    description: "条目 intermediate → longterm 晋升事件"
+    actor_pattern: "engine|llm:*|fallback:rule"
+    authority_level: 3
+  attic_nomination:
+    description: "回退=移 attic 并登记（公理 F：禁销毁式回退）"
+    actor_pattern: "engine|human:*"
+    authority_level: 2   # 裁量+留痕
+  tombstone:
+    description: "墓碑：标记后退出检索但原位保留（审计窗口，v3.10 件五语义）"
+    actor_pattern: "engine|human:*"
+    authority_level: 2   # 裁量+留痕
+  memory_append:
+    description: "条目写入留痕（含 content_hash 幂等键）——bridge W4 接入面"
+    actor_pattern: "llm:*|ci:*|fallback:rule"
+    authority_level: 1   # 全放权（写入面，账本自带兜底）
+  memory_retrieve_hit:
+    description: "检索命中留痕（last_used 刷新的账面依据）"
+    actor_pattern: "engine"
+    authority_level: 1   # 全放权

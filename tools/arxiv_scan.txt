@@ -1,0 +1,23 @@
+# -*- coding: utf-8 -*-
+"""arxiv_scan.txt — 全库 arXiv 号扫描（00-文献清单.md 机械统计的存档脚本）
+输出：唯一 arXiv 号清单 + 各号出现文件数 + citations.md 副本数。"""
+import os, re
+
+ROOT = r"D:\zcode专用！！！！危险！！！！！！！！！"
+pat = re.compile(r"\b2[3-5][0-9]{2}\.[0-9]{4,5}\b")
+allids = {}
+cites = []
+for dirpath, dirnames, filenames in os.walk(ROOT):
+    dirnames[:] = [d for d in dirnames if d not in {"workspace-audit", ".git"}]
+    for fn in filenames:
+        rel = os.path.relpath(os.path.join(dirpath, fn), ROOT).replace("\\", "/")
+        if fn == "citations.md":
+            cites.append(rel)
+        if os.path.splitext(fn)[1].lower() in (".md", ".txt") and ("引用论文总表" in fn or "citations" in fn):
+            with open(os.path.join(dirpath, fn), encoding="utf-8", errors="replace") as f:
+                for m in pat.finditer(f.read()):
+                    allids.setdefault(m.group(0), set()).add(rel)
+print("citations.md 副本数:", len(cites))
+print("唯一 arXiv 号总数:", len(allids))
+for i in sorted(allids):
+    print(" ", i, f"({len(allids[i])} 文件)")
